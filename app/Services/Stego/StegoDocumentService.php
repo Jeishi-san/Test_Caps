@@ -58,10 +58,12 @@ class StegoDocumentService
         }
 
         $pythonTimeout = (int) config('stegolock.python_timeout', 60);
-        $targetSeconds = max(300, $pythonTimeout * 5);
+        $targetSeconds = max(620, $pythonTimeout + 80);
 
         // Some runtimes honor ini_set, others prefer set_time_limit.
         @ini_set('max_execution_time', (string) $targetSeconds);
+        @ini_set('max_input_time', (string) min(600, $targetSeconds));
+        @ini_set('memory_limit', '512M');
         if (function_exists('set_time_limit')) {
             @set_time_limit($targetSeconds);
         }
@@ -326,6 +328,8 @@ class StegoDocumentService
      */
     public function decode(int $stegoDocumentId, string $masterKey, int $userId): string
     {
+        $this->extendExecutionTimeLimit();
+
         $tStart = microtime(true);
 
         // Validate inputs

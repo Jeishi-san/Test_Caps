@@ -74,7 +74,7 @@ return [
     |
     */
 
-    'python_timeout' => (int) env('PYTHON_TIMEOUT', 60),
+    'python_timeout' => (int) env('PYTHON_TIMEOUT', 540),
 
     /*
     |--------------------------------------------------------------------------

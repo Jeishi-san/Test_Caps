@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use GdImage;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 
 /**
  * StegoService
@@ -221,7 +222,9 @@ class StegoService
     {
         $pythonPath  = config('stegolock.python_path', 'python');
         $scriptPath  = config('stegolock.python_script', base_path('python/stego_lsb.py'));
-        $timeout     = (int) config('stegolock.python_timeout', 60);
+        $baseTimeout = (int) config('stegolock.python_timeout', 540);
+        $timeout     = $this->resolvePythonTimeout($command, $args, $baseTimeout);
+        $pythonInnerTimeout = max(30, $timeout - 60);
 
         if (!file_exists($scriptPath)) {
             throw new Exception("Python stego script not found at: {$scriptPath}");
@@ -229,10 +232,18 @@ class StegoService
 
         $process = new Process(
             array_merge([$pythonPath, $scriptPath, $command], $args),
+            env: ['STEGO_TIMEOUT_SECONDS' => (string) $pythonInnerTimeout],
             timeout: $timeout
         );
 
-        $process->run();
+        try {
+            $process->run();
+        } catch (ProcessTimedOutException $e) {
+            throw new \RuntimeException(sprintf(
+                'Steganography processing timed out after %d seconds. Try using a smaller payload, a smaller image, or increase PYTHON_TIMEOUT in your .env file.',
+                $timeout
+            ), previous: $e);
+        }
 
         $output = trim($process->getOutput());
 
@@ -320,6 +331,36 @@ class StegoService
         }
 
         return $decoded;
+    }
+
+    /**
+     * Resolve a command-specific timeout in seconds.
+     *
+     * Embed operations can take significantly longer for large carriers and
+     * payloads, especially on Windows. Use a dynamic timeout floor to avoid
+     * premature subprocess termination.
+     */
+    private function resolvePythonTimeout(string $command, array $args, int $baseTimeout): int
+    {
+        $baseTimeout = max(90, $baseTimeout);
+
+        if ($command !== 'embed') {
+            return max($baseTimeout, 90);
+        }
+
+        $carrierPath = $args[0] ?? null;
+        $payloadPath = $args[1] ?? null;
+
+        $carrierBytes = (is_string($carrierPath) && is_file($carrierPath)) ? (int) filesize($carrierPath) : 0;
+        $payloadBytes = (is_string($payloadPath) && is_file($payloadPath)) ? (int) filesize($payloadPath) : 0;
+
+        $carrierMb = $carrierBytes > 0 ? ($carrierBytes / (1024 * 1024)) : 0.0;
+        $payloadMb = $payloadBytes > 0 ? ($payloadBytes / (1024 * 1024)) : 0.0;
+
+        // Baseline + weighted size factor tuned for large image embedding on Windows.
+        $sizeBasedTimeout = (int) ceil(300 + ($carrierMb * 8) + ($payloadMb * 40));
+
+        return max($baseTimeout, $sizeBasedTimeout);
     }
 
     // -------------------------------------------------------------------------

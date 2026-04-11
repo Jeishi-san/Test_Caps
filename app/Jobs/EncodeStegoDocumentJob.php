@@ -41,8 +41,8 @@ class EncodeStegoDocumentJob implements ShouldQueue, ShouldBeEncrypted
     /** No retries — master key must not linger in failed_jobs. */
     public int $tries = 1;
 
-    /** Allow up to 5 minutes for large carrier images. */
-    public int $timeout = 300;
+    /** Allow up to 10 minutes for large carrier images. */
+    public int $timeout = 600;
 
     /**
      * @param int      $userId              Owner's user ID.

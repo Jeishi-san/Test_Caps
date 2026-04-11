@@ -12,18 +12,28 @@ All output is a single JSON line on stdout:
   {"success": true,  "data": "<value>"}
   {"success": false, "error": "<message>"}
 
-Binary payloads are base64-encoded before embedding and
-base64-decoded after extraction to bridge stegano's string-only API.
+Binary payloads are base64-encoded by PHP before embedding.
+This driver uses a vectorized NumPy implementation with 2 LSBs/channel.
 
 Dependencies:
-  pip install stegano Pillow
+    pip install numpy Pillow
+
+Optional legacy extraction fallback (old stegano-based images):
+    pip install stegano
 """
 
 import sys
 import json
 import base64
 import os
-import tempfile
+import multiprocessing
+
+
+BITS_PER_CHANNEL = 2
+LSB_MASK = (1 << BITS_PER_CHANNEL) - 1
+CLEAR_MASK = 0xFF ^ LSB_MASK
+HEADER_MAGIC = b"STG2"
+HEADER_SIZE_BYTES = 8  # 4-byte magic + 4-byte payload length
 
 
 def _ok(data) -> None:
@@ -34,23 +44,135 @@ def _err(message: str) -> None:
     print(json.dumps({"success": False, "error": message}), flush=True)
 
 
-def _prepare_rgb_carrier(carrier_path: str):
+def _internal_timeout_seconds() -> int:
     """
-    Ensure the carrier is RGB to avoid interactive conversion prompts in stegano.
+    Read optional inner timeout configured by the PHP caller.
+   
+    This timeout is intentionally lower than Process::timeout so Python can
+    stop cleanly before the outer process layer force-terminates it.
+    """
+    raw = os.environ.get("STEGO_TIMEOUT_SECONDS", "0").strip()
+    try:
+        seconds = int(raw)
+    except ValueError:
+        return 0
+    return max(0, seconds)
 
-    Returns a tuple of:
-      (path_to_use_for_embedding, temp_file_to_cleanup_or_none)
-    """
+
+def _pack_payload(b64_payload: str) -> bytes:
+    payload_bytes = b64_payload.encode("utf-8")
+    return HEADER_MAGIC + len(payload_bytes).to_bytes(4, "big") + payload_bytes
+
+
+def _save_image_fast(image_array, output_path: str) -> None:
     from PIL import Image
 
-    with Image.open(carrier_path) as img:
-        if img.mode == "RGB":
-            return carrier_path, None
+    output_image = Image.fromarray(image_array, "RGB")
+    ext = os.path.splitext(output_path)[1].lower()
 
-        rgb_image = img.convert("RGB")
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            rgb_image.save(tmp.name, format="PNG")
-            return tmp.name, tmp.name
+    if ext == ".png":
+        output_image.save(output_path, format="PNG", compress_level=1)
+    else:
+        output_image.save(output_path)
+
+
+def _embed_worker(carrier_path: str, b64_payload: str, output_path: str, queue) -> None:
+    """Run vectorized 2-LSB embedding in a child process for timeout enforcement."""
+    try:
+        import numpy as np
+        from PIL import Image
+
+        img = Image.open(carrier_path).convert("RGB")
+        arr = np.array(img, dtype=np.uint8)
+        flat = arr.reshape(-1)
+
+        packed_payload = _pack_payload(b64_payload)
+
+        payload_bits = np.unpackbits(np.frombuffer(packed_payload, dtype=np.uint8))
+        pad = (-len(payload_bits)) % BITS_PER_CHANNEL
+        if pad:
+            payload_bits = np.pad(payload_bits, (0, pad), mode="constant")
+
+        grouped = payload_bits.reshape(-1, BITS_PER_CHANNEL)
+        encoded_values = (grouped[:, 0] << 1) | grouped[:, 1]
+        required_channels = len(encoded_values)
+
+        if required_channels > len(flat):
+            queue.put({
+                "success": False,
+                "error": f"The message you want to hide is too long: {len(b64_payload)}",
+            })
+            return
+
+        flat[:required_channels] = (flat[:required_channels] & CLEAR_MASK) | encoded_values.astype(np.uint8)
+
+        out_dir = os.path.dirname(output_path)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+
+        _save_image_fast(flat.reshape(arr.shape), output_path)
+        queue.put({"success": True})
+    except Exception as exc:
+        queue.put({"success": False, "error": str(exc)})
+
+
+def _extract_bytes_from_flat(flat, start_channel: int, byte_count: int):
+    import numpy as np
+
+    if byte_count <= 0:
+        return b""
+
+    bit_count = byte_count * 8
+    channels_needed = (bit_count + BITS_PER_CHANNEL - 1) // BITS_PER_CHANNEL
+
+    end_channel = start_channel + channels_needed
+    if end_channel > len(flat):
+        raise ValueError("Carrier does not contain enough embedded data")
+
+    values = (flat[start_channel:end_channel] & LSB_MASK).astype(np.uint8)
+
+    bits = np.empty(channels_needed * BITS_PER_CHANNEL, dtype=np.uint8)
+    bits[0::2] = (values >> 1) & 1
+    bits[1::2] = values & 1
+    bits = bits[:bit_count]
+
+    return np.packbits(bits).tobytes()
+
+
+def _extract_2lsb_payload(stego_path: str) -> str:
+    import numpy as np
+    from PIL import Image
+
+    flat = np.array(Image.open(stego_path).convert("RGB"), dtype=np.uint8).reshape(-1)
+
+    header = _extract_bytes_from_flat(flat, 0, HEADER_SIZE_BYTES)
+    magic = header[:4]
+
+    if magic != HEADER_MAGIC:
+        raise ValueError("Carrier does not contain STG2 payload header")
+
+    payload_len = int.from_bytes(header[4:8], "big")
+    if payload_len < 0:
+        raise ValueError("Invalid embedded payload length")
+
+    data_start_channel = (HEADER_SIZE_BYTES * 8 + BITS_PER_CHANNEL - 1) // BITS_PER_CHANNEL
+    payload_bytes = _extract_bytes_from_flat(flat, data_start_channel, payload_len)
+
+    return payload_bytes.decode("utf-8")
+
+
+def _extract_legacy_payload(stego_path: str):
+    """Fallback for older images created with the prior stegano-based format."""
+    try:
+        from stegano import lsb
+    except Exception:
+        return None
+
+    message = lsb.reveal(stego_path)
+    if not message:
+        return None
+
+    return message
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +191,6 @@ def cmd_embed(carrier_path: str, payload_path: str, output_path: str) -> None:
     to avoid Windows command line length limits.
     """
     try:
-        from stegano import lsb
-        temp_carrier_path = None
-
         if not os.path.isfile(carrier_path):
             _err(f"Carrier file not found: {carrier_path}")
             return
@@ -91,30 +210,44 @@ def cmd_embed(carrier_path: str, payload_path: str, output_path: str) -> None:
             _err("Payload is not valid base64")
             return
 
-        # Force RGB before embedding to prevent stegano from asking interactive
-        # conversion questions on palette/other non-RGB modes.
-        prepared_carrier_path, temp_carrier_path = _prepare_rgb_carrier(carrier_path)
+        timeout_seconds = _internal_timeout_seconds()
 
-        # stegano.lsb.hide() expects a string message
-        secret_image = lsb.hide(prepared_carrier_path, b64_payload)
+        if timeout_seconds > 0:
+            ctx = multiprocessing.get_context("spawn")
+            queue = ctx.Queue(maxsize=1)
+            proc = ctx.Process(
+                target=_embed_worker,
+                args=(carrier_path, b64_payload, output_path, queue),
+            )
+            proc.start()
+            proc.join(timeout_seconds)
 
-        # Ensure the output directory exists
-        out_dir = os.path.dirname(output_path)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
+            if proc.is_alive():
+                proc.terminate()
+                proc.join()
+                _err(f"Embed timed out after {timeout_seconds} seconds")
+                return
 
-        secret_image.save(output_path)
+            if queue.empty():
+                _err("Embedding worker exited unexpectedly")
+                return
+
+            result = queue.get()
+            if not result.get("success", False):
+                _err(result.get("error", "Embedding worker failed"))
+                return
+        else:
+            local_queue = multiprocessing.Queue(maxsize=1)
+            _embed_worker(carrier_path, b64_payload, output_path, local_queue)
+            result = local_queue.get()
+            if not result.get("success", False):
+                _err(result.get("error", "Embedding worker failed"))
+                return
 
         _ok(output_path)
 
     except Exception as exc:
         _err(str(exc))
-    finally:
-        if temp_carrier_path and os.path.exists(temp_carrier_path):
-            try:
-                os.remove(temp_carrier_path)
-            except OSError:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -127,17 +260,17 @@ def cmd_extract(stego_path: str) -> None:
     Returns the raw base64 string — PHP decodes it back to binary.
     """
     try:
-        from stegano import lsb
-
         if not os.path.isfile(stego_path):
             _err(f"Stego image not found: {stego_path}")
             return
 
-        message = lsb.reveal(stego_path)
-
-        if message is None:
-            _err("No hidden data found in image. File may not have been encoded with StegoLock.")
-            return
+        try:
+            message = _extract_2lsb_payload(stego_path)
+        except Exception as vectorized_exc:
+            message = _extract_legacy_payload(stego_path)
+            if message is None:
+                _err(str(vectorized_exc))
+                return
 
         # Validate we got valid base64 back (sanity check)
         try:
@@ -161,7 +294,7 @@ def cmd_capacity(image_path: str) -> None:
     Calculate the maximum payload capacity (in bytes) of an image.
 
     Formula mirrors the PHP StegoService:
-      capacity = (width * height * 3 channels * 1 bit/channel) / 8 bits - 4 bytes header
+            capacity = (width * height * 3 channels * 2 bits/channel) / 8 bits - 8 bytes header
     Then divided by 4/3 to account for base64 overhead (binary → base64 inflates by ~33%).
     """
     try:
@@ -175,7 +308,7 @@ def cmd_capacity(image_path: str) -> None:
             width, height = img.size
 
         # Raw LSB capacity in bytes
-        raw_capacity = (width * height * 3) // 8 - 4
+        raw_capacity = (width * height * 3 * BITS_PER_CHANNEL) // 8 - HEADER_SIZE_BYTES
 
         # Adjust for base64 overhead: base64 encoding inflates size by 4/3
         # So usable binary bytes = raw_capacity * 3 / 4
