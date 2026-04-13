@@ -13,16 +13,15 @@ class UserController extends Controller
 {
     /**
      * Get all users with their roles
+     * 
+     * All authenticated users can list users for sharing/collaboration purposes.
+     * Admins and owners can see all user details including roles.
      */
     public function index(): JsonResponse
     {
         $user = Auth::user();
         
-        // Only admins and owners can list all users
-        if (!$user->isAdmin() && !$user->isOwner()) {
-            return response()->json(['message' => 'Forbidden: You do not have permission to list users.'], 403);
-        }
-
+        // All authenticated users can see the user list for sharing
         $users = User::select('id', 'name', 'email', 'username', 'role', 'created_at')
             ->orderBy('name')
             ->get()

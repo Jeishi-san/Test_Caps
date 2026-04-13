@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -13,42 +13,6 @@ interface ShareModalProps {
   onSuccess?: () => void;
 }
 
-interface PermissionLevel {
-  value: string;
-  label: string;
-  description: string;
-}
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-}
-
-const permissionLevels: PermissionLevel[] = [
-  {
-    value: 'viewer',
-    label: 'Viewer',
-    description: 'Can view and download',
-  },
-  {
-    value: 'commenter',
-    label: 'Commenter',
-    description: 'Can view, download, and add comments',
-  },
-  {
-    value: 'editor',
-    label: 'Editor',
-    description: 'Can view, download, edit, and comment',
-  },
-  {
-    value: 'co_owner',
-    label: 'Co-owner',
-    description: 'Can view, download, edit, comment, and share',
-  },
-];
-
 export default function ShareModal({
   show,
   onClose,
@@ -57,55 +21,66 @@ export default function ShareModal({
   slug = 'document',
   onSuccess,
 }: ShareModalProps) {
-  const [permissionLevel, setPermissionLevel] = useState('viewer');
   const [expirationDate, setExpirationDate] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
   const [shareLink, setShareLink] = useState('');
   const [showLink, setShowLink] = useState(false);
-  const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userQuery, setUserQuery] = useState('');
+  const [userResults, setUserResults] = useState<{ id: number; name: string; email: string; role: string }[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<{ id: number; name: string; email: string; role: string }[]>([]);
 
-  // Load users for dropdown
   useEffect(() => {
     if (!show) {
+      setUserQuery('');
+      setUserResults([]);
+      setSelectedUsers([]);
       return;
     }
 
-    const loadUsers = async () => {
-      setIsLoadingUsers(true);
-      try {
-        const response = await axios.get('/api/users');
-        setAllUsers(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error('Failed to load users:', error);
-        setAllUsers([]);
-      } finally {
-        setIsLoadingUsers(false);
-      }
-    };
+    const query = userQuery.trim();
 
-    loadUsers();
-  }, [show]);
-
-  const handleAddUser = () => {
-    if (!selectedUserId) return;
-
-    const user = allUsers.find((u) => String(u.id) === selectedUserId);
-    if (!user) return;
-
-    if (!selectedUsers.find(u => u.id === user.id)) {
-      setSelectedUsers([...selectedUsers, user]);
+    if (query.length < 2) {
+      setUserResults([]);
+      return;
     }
 
-    setSelectedUserId('');
+    const timer = window.setTimeout(async () => {
+      setIsSearchingUsers(true);
+      try {
+        const response = await axios.get('/api/users/search', {
+          params: { q: query },
+        });
+
+        const results = Array.isArray(response.data) ? response.data : [];
+        setUserResults(results);
+      } catch (error) {
+        console.error('Failed to search users:', error);
+        setUserResults([]);
+      } finally {
+        setIsSearchingUsers(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [show, userQuery]);
+
+  const handleAddRecipient = (user: { id: number; name: string; email: string; role: string }) => {
+    setSelectedUsers((current) => {
+      if (current.some((selected) => selected.id === user.id)) {
+        return current;
+      }
+
+      return [...current, user];
+    });
+
+    setUserQuery('');
+    setUserResults([]);
   };
 
-  // Remove user from selected users
-  const handleRemoveUser = (userId: number) => {
-    setSelectedUsers(selectedUsers.filter(u => u.id !== userId));
+  const handleRemoveRecipient = (userId: number) => {
+    setSelectedUsers((current) => current.filter((user) => user.id !== userId));
   };
 
   const handleShare = async () => {
@@ -119,32 +94,13 @@ export default function ShareModal({
         name: documentName,
         valid_until: expirationDate || null,
         visibility: isPublic ? 'public' : 'private',
-        permission_level: permissionLevel,
+        recipient_emails: selectedUsers.map((user) => user.email),
       });
 
       const share = response.data.share;
       const link = `${window.location.origin}/shares/${slug}/${documentId}/${share.token}`;
       setShareLink(link);
       setShowLink(true);
-
-      // Share with selected users
-      if (selectedUsers.length > 0) {
-        for (const user of selectedUsers) {
-          try {
-            await axios.post('/api/collaboration/shares', {
-              shared_id: documentId,
-              slug: slug,
-              name: documentName,
-              valid_until: expirationDate || null,
-              visibility: 'private',
-              permission_level: permissionLevel,
-              user_id: user.id,
-            });
-          } catch (error) {
-            console.error(`Failed to share with user ${user.id}:`, error);
-          }
-        }
-      }
 
       if (onSuccess) {
         onSuccess();
@@ -158,29 +114,40 @@ export default function ShareModal({
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(shareLink);
-      alert('Link copied to clipboard!');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareLink);
+        alert('Link copied to clipboard!');
+      } else {
+        // Fallback for non-HTTPS contexts or old browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = shareLink;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        alert('Link copied to clipboard!');
+      }
     } catch (error) {
       console.error('Failed to copy link:', error);
+      alert('Failed to copy link. Please copy it manually.');
     }
   };
-
 
 
   const handleClose = () => {
     setShowLink(false);
     setShareLink('');
-    setPermissionLevel('viewer');
     setExpirationDate('');
     setIsPublic(false);
-    setSelectedUserId('');
+    setUserQuery('');
+    setUserResults([]);
     setSelectedUsers([]);
     onClose();
   };
-
-  const dropdownUsers = allUsers.filter(
-    (user) => !selectedUsers.some((selected) => selected.id === user.id),
-  );
 
     return (
         <Modal show={show} onClose={handleClose} title={`Share ${slug === 'stego' ? 'Stego File' : slug === 'folder' ? 'Folder' : 'Document'}`}>
@@ -192,36 +159,81 @@ export default function ShareModal({
                 {documentName}
               </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Choose who can access this {slug === 'folder' ? 'folder' : slug === 'stego' ? 'stego file' : 'document'} and what they can do.
+                Create a download-only share link for this {slug === 'folder' ? 'folder' : slug === 'stego' ? 'stego file' : 'document'}.
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Permission Level
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search users to notify (optional)
               </label>
-              <div className="space-y-3">
-                {permissionLevels.map((level) => (
-                  <label
-                    key={level.value}
-                    className="flex items-start space-x-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
-                  >
-                    <input
-                      type="radio"
-                      name="permissionLevel"
-                      value={level.value}
-                      checked={permissionLevel === level.value}
-                      onChange={(e) => setPermissionLevel(e.target.value)}
-                      className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                    />
-                    <div>
-                      <div className="font-medium text-gray-900">{level.label}</div>
-                      <div className="text-sm text-gray-500">{level.description}</div>
-                    </div>
-                  </label>
-                ))}
+
+              <div className="relative">
+                <input
+                  type="text"
+                  value={userQuery}
+                  onChange={(e) => setUserQuery(e.target.value)}
+                  placeholder="Search by name or email"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                />
+
+                {isSearchingUsers && (
+                  <p className="mt-2 text-xs text-gray-500">Searching users...</p>
+                )}
+
+                {!isSearchingUsers && userQuery.trim().length >= 2 && userResults.length > 0 && (
+                  <div className="mt-2 max-h-48 overflow-auto rounded-md border border-gray-200 bg-white shadow-sm">
+                    {userResults.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => handleAddRecipient(user)}
+                        disabled={selectedUsers.some((selected) => selected.id === user.id)}
+                        className="flex w-full items-center justify-between gap-3 border-b border-gray-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                      >
+                        <span>
+                          <span className="font-medium text-gray-900">{user.name}</span>{' '}
+                          <span className="text-gray-500">({user.email})</span>
+                        </span>
+                        <span className="text-xs text-gray-400">{user.role}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {!isSearchingUsers && userQuery.trim().length >= 2 && userResults.length === 0 && (
+                  <p className="mt-2 text-xs text-gray-500">No matching users found.</p>
+                )}
               </div>
             </div>
+
+            {selectedUsers.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selected recipients
+                </label>
+                <div className="space-y-2">
+                  {selectedUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+                    >
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                        <div className="text-xs text-gray-500">{user.email}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRecipient(user.id)}
+                        className="text-sm font-medium text-red-600 hover:text-red-800"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -236,69 +248,6 @@ export default function ShareModal({
               />
             </div>
 
-            {/* Dropdown user selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Share with specific users (optional)
-              </label>
-
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                  disabled={isLoadingUsers}
-                >
-                  <option value="">
-                    {isLoadingUsers ? 'Loading users...' : 'Select a user'}
-                  </option>
-                  {dropdownUsers.map((user) => (
-                    <option key={user.id} value={String(user.id)}>
-                      {user.name} ({user.role}) - {user.email}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleAddUser}
-                  disabled={!selectedUserId || isLoadingUsers}
-                  className="rounded-md border border-indigo-600 px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400"
-                >
-                  Add
-                </button>
-              </div>
-
-              {!isLoadingUsers && allUsers.length === 0 && (
-                <p className="mt-2 text-sm text-gray-500">No users available.</p>
-              )}
-
-              {/* Selected users */}
-              {selectedUsers.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Selected Users</h4>
-                  <div className="space-y-2">
-                    {selectedUsers.map((user) => (
-                      <div
-                        key={user.id}
-                        className="flex items-center justify-between p-2 rounded-lg border border-gray-200 bg-gray-50"
-                      >
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                          <div className="text-xs text-gray-500">{user.email} • {user.role}</div>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveUser(user.id)}
-                          className="text-red-600 hover:text-red-800 text-sm font-medium"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div className="flex items-center">
               <input
                 id="public"
@@ -306,7 +255,7 @@ export default function ShareModal({
                 type="checkbox"
                 checked={isPublic}
                 onChange={(e) => setIsPublic(e.target.checked)}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
               <label htmlFor="public" className="ml-2 block text-sm text-gray-700">
                 Make this share link public
@@ -319,8 +268,46 @@ export default function ShareModal({
                 disabled={isLoading}
                 className="flex-1"
               >
-                {isLoading ? 'Sharing...' : 'Create Share Link'}
+                {isLoading ? 'Sharing...' : 'Copy Link'}
               </PrimaryButton>
+              <SecondaryButton 
+                onClick={async () => {
+                  if (selectedUsers.length === 0) {
+                    alert('Please select at least one user to invite first');
+                    return;
+                  }
+                  
+                  setIsLoading(true);
+                  try {
+                    // Use existing share endpoint which sends email notifications
+                    const response = await axios.post('/api/collaboration/shares', {
+                      shared_id: documentId,
+                      slug: slug,
+                      name: documentName,
+                      valid_until: expirationDate || null,
+                      visibility: 'private',
+                      recipient_emails: selectedUsers.map((user) => user.email),
+                    });
+                    
+                    alert(`Success! ${selectedUsers.length} user${selectedUsers.length > 1 ? 's have' : ' has'} been notified. They will receive an email with a download link for this ${slug === 'stego' ? 'stego document' : 'document'}.`);
+                    setSelectedUsers([]);
+                    setUserQuery('');
+                    
+                    if (onSuccess) {
+                      onSuccess();
+                    }
+                  } catch (error) {
+                    console.error('Failed to send invitations:', error);
+                    alert('Failed to send invitations. Please try again.');
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                disabled={isLoading || selectedUsers.length === 0}
+                className="flex-1"
+              >
+                {isLoading ? 'Sending...' : 'Invite Users'}
+              </SecondaryButton>
               <SecondaryButton onClick={handleClose}>
                 Cancel
               </SecondaryButton>
@@ -377,6 +364,6 @@ export default function ShareModal({
           </>
         )}
       </div>
-    </Modal>
-  );
-}
+      </Modal>
+    );
+  }

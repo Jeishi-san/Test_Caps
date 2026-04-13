@@ -62,13 +62,32 @@ class ShareDocumentController extends Controller
 
         $shareDocument = ShareDocument::create($shareData);
 
-        // If permission level is specified, set it
-        if (isset($validated['permission_level'])) {
-            $shareDocument->setPermissionLevel($validated['permission_level']);
-            $shareDocument->save();
+        // Shared links are download-only by default.
+        $shareDocument->setPermissionLevel(ShareDocument::PERMISSION_VIEWER);
+        $shareDocument->save();
+
+        $recipientEmails = array_values(array_filter((array) ($validated['recipient_emails'] ?? [])));
+
+        // Create notifications for selected recipients, if any.
+        foreach ($recipientEmails as $email) {
+            $recipient = User::where('email', $email)->first();
+
+            if (!$recipient) {
+                continue;
+            }
+
+            $sender = Auth::user();
+            $shareName = $request->name ?? 'Document';
+            $this->notificationService->createShareNotification(
+                $recipient,
+                $sender,
+                $request->slug,
+                $shareName,
+                $request->shared_id
+            );
         }
 
-        // Create notification for the recipient if email is provided
+        // Backwards compatibility with older clients sending a single email.
         if (isset($validated['email'])) {
             $recipient = User::where('email', $validated['email'])->first();
             if ($recipient) {
