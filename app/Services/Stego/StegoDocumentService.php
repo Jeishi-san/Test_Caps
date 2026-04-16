@@ -138,13 +138,22 @@ class StegoDocumentService
         }
 
         // -----------------------------------------------------------------
-        // Step 1 & 2: Derive DEK and encrypt the document
+        // Step 1 & 2: Generate random DEK (envelope mode), wrap for owner, encrypt
         // -----------------------------------------------------------------
         $documentRef = $documentId ? (string) $documentId : uniqid('stego_', true);
 
-        $dekResult   = $this->crypto->deriveDEK($masterKey, $documentRef);
-        $encrypted   = $this->crypto->encrypt($plaintext, $dekResult['dek']);
-        $hash        = $this->crypto->hashDocument($plaintext);
+        // Generate a random DEK for sharing-friendly envelope encryption
+        $randomDek = $this->crypto->generateDEK();
+
+        // Encrypt plaintext with the random DEK
+        $encrypted = $this->crypto->encrypt($plaintext, $randomDek);
+        $hash      = $this->crypto->hashDocument($plaintext);
+
+        // Wrap the random DEK with owner's master key for envelope-mode storage
+        $ownerWrappedResult = $this->crypto->wrapDekForUser($randomDek, $masterKey);
+
+        // Keep legacy DEK derivation metadata for potential backward-compat reads
+        $legacyDekResult = $this->crypto->deriveDEK($masterKey, $documentRef);
 
         // -----------------------------------------------------------------
         // Step 3: Select carriers from pool or use provided paths
@@ -205,8 +214,16 @@ class StegoDocumentService
                 'stego_iv'          => $encrypted['iv'],
                 'stego_auth_tag'    => $encrypted['auth_tag'],
                 'stego_hash_sha256' => $hash,
-                'stego_dek_salt'    => $dekResult['salt'],
-                'stego_dek_iter'    => $dekResult['iterations'],
+                // Legacy derived-DEK metadata (for backward compat)
+                'stego_dek_salt'    => $legacyDekResult['salt'],
+                'stego_dek_iter'    => $legacyDekResult['iterations'],
+                // Envelope-mode metadata
+                'stego_mode'                      => 'envelope_wrapped',
+                'owner_wrapped_dek'               => $ownerWrappedResult['wrapped_dek'],
+                'owner_wrapped_dek_iv'            => $ownerWrappedResult['iv'],
+                'owner_wrapped_dek_auth_tag'      => $ownerWrappedResult['auth_tag'],
+                'owner_wrapped_dek_alg'           => $ownerWrappedResult['algorithm'],
+                'owner_wrapped_dek_version'       => $ownerWrappedResult['version'],
                 'compressed'        => true,
                 's3_key'            => null,
                 'status'            => 'pending',
@@ -318,6 +335,80 @@ class StegoDocumentService
     // =========================================================================
 
     /**
+     * Resolve the DEK for a caller based on document mode and caller role.
+     *
+     * Supports dual-mode decoding:
+     *  - envelope_wrapped: unwrap caller-specific DEK (owner or active viewer)
+     *  - legacy_derived: re-derive from master key (owner-only)
+     *
+     * @param  StegoDocument $stegoDoc    The stego document with mode and wrap metadata
+     * @param  int          $userId      Caller's user ID
+     * @param  string       $masterKey   Caller's master key (hex, 64 chars)
+     * @return string                    Hex-encoded DEK (64 hex chars)
+     * @throws Exception                 If DEK cannot be resolved for caller/mode
+     */
+    private function resolveDekForCaller(StegoDocument $stegoDoc, int $userId, string $masterKey): string
+    {
+        $isOwner = (int) $stegoDoc->user_id === $userId;
+
+        // Envelope-wrapped mode: unwrap caller-specific wrapped DEK
+        if ($stegoDoc->stego_mode === 'envelope_wrapped') {
+            if ($isOwner) {
+                // Owner: use owner-wrapped DEK
+                return $this->crypto->unwrapDekForUser(
+                    $stegoDoc->owner_wrapped_dek,
+                    $stegoDoc->owner_wrapped_dek_iv,
+                    $stegoDoc->owner_wrapped_dek_auth_tag,
+                    $masterKey
+                );
+            } else {
+                // Viewer: use viewer-wrapped DEK from active grant
+                $grant = $stegoDoc->viewerGrants()
+                    ->where('viewer_user_id', $userId)
+                    ->where('grant_status', 'active')
+                    ->first();
+
+                if (!$grant || empty($grant->viewer_wrapped_dek)) {
+                    throw new Exception(
+                        'Cannot decode: viewer grant not active or wrapped DEK missing. '
+                        . 'Complete grant acceptance first.'
+                    );
+                }
+
+                return $this->crypto->unwrapDekForUser(
+                    $grant->viewer_wrapped_dek,
+                    $grant->viewer_wrapped_dek_iv,
+                    $grant->viewer_wrapped_dek_auth_tag,
+                    $masterKey
+                );
+            }
+        }
+
+        // Legacy-derived mode: re-derive DEK (owner-only, no sharing)
+        if ($stegoDoc->stego_mode === 'legacy_derived' || $stegoDoc->stego_mode === null) {
+            if (!$isOwner) {
+                throw new Exception(
+                    'This stego document uses the legacy encryption model. '
+                    . 'Only the owner can decode it. Ask the owner to decode and share the output file.'
+                );
+            }
+
+            // Re-derive using stored salt + iterations
+            $documentRef = $stegoDoc->document_id ? (string) $stegoDoc->document_id : (string) $stegoDoc->id;
+            $dekResult = $this->crypto->deriveDEK(
+                $masterKey,
+                $documentRef,
+                $stegoDoc->stego_dek_salt,
+                $stegoDoc->stego_dek_iter
+            );
+
+            return $dekResult['dek'];
+        }
+
+        throw new Exception('Unknown stego_mode: ' . $stegoDoc->stego_mode);
+    }
+
+    /**
      * Recover the original plaintext from a StegoDocument.
      *
      * @param  int    $stegoDocumentId  Primary key of the StegoDocument to decode
@@ -350,6 +441,11 @@ class StegoDocumentService
         // -----------------------------------------------------------------
         $stegoDoc = $this->persistence->findStegoDocument($stegoDocumentId);
         $tMetaLoaded = microtime(true);
+
+        // Resolve caller's DEK based on document mode (envelope_wrapped or legacy_derived)
+        // This handles owner decode (all modes) and viewer decode (envelope-mode with active grant)
+        $dek = $this->resolveDekForCaller($stegoDoc, $userId, $masterKey);
+        $tDekResolved = microtime(true);
 
         $segments = $this->persistence->getSegments($stegoDocumentId);
         $tSegmentsLoaded = microtime(true);
@@ -393,19 +489,11 @@ class StegoDocumentService
             $tCipherReady = microtime(true);
 
             // -----------------------------------------------------------------
-            // Step 5: Re-derive DEK and decrypt
+            // Step 5: Decrypt using the resolved DEK (envelope or legacy)
             // -----------------------------------------------------------------
-            $documentRef = $stegoDoc->document_id ? (string) $stegoDoc->document_id : (string) $stegoDoc->id;
-            $dekResult   = $this->crypto->deriveDEK(
-                $masterKey,
-                $documentRef,
-                $stegoDoc->stego_dek_salt,
-                $stegoDoc->stego_dek_iter
-            );
-
             $plaintext = $this->crypto->decrypt(
                 $ciphertext,
-                $dekResult['dek'],
+                $dek,
                 $stegoDoc->stego_iv,
                 $stegoDoc->stego_auth_tag
             );

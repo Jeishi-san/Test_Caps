@@ -102,6 +102,11 @@ Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
             ->name('documents.grant')
             ->whereNumber('id');
 
+        // Accept a pending stego document grant (viewer only)
+        Route::post('/documents/{id}/grant/{viewer_user_id}/accept', [StegoDocumentController::class, 'acceptGrant'])
+            ->name('documents.grant.accept')
+            ->whereNumber(['id', 'viewer_user_id']);
+
         // List all grants for a stego document (owner only)
         Route::get('/documents/{id}/grants',                      [StegoDocumentController::class, 'listGrants'])
             ->name('documents.grants.index')

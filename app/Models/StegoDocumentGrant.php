@@ -24,6 +24,18 @@ class StegoDocumentGrant extends Model
         'stego_document_id',
         'viewer_user_id',
         'granted_by',
+        'grant_status',
+        'accepted_at',
+        'viewer_wrapped_dek',
+        'viewer_wrapped_dek_iv',
+        'viewer_wrapped_dek_auth_tag',
+        'viewer_wrapped_dek_alg',
+        'viewer_wrapped_dek_version',
+    ];
+
+    protected $casts = [
+        'accepted_at' => 'datetime',
+        'viewer_wrapped_dek_version' => 'integer',
     ];
 
     // -------------------------------------------------------------------------

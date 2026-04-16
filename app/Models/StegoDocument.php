@@ -32,6 +32,12 @@ class StegoDocument extends Model
         'stego_hash_sha256',
         'stego_dek_salt',
         'stego_dek_iter',
+        'stego_mode',
+        'owner_wrapped_dek',
+        'owner_wrapped_dek_iv',
+        'owner_wrapped_dek_auth_tag',
+        'owner_wrapped_dek_alg',
+        'owner_wrapped_dek_version',
         'compressed',
         's3_key',
         'status',
@@ -44,6 +50,7 @@ class StegoDocument extends Model
 
     protected $casts = [
         'compressed' => 'boolean',
+        'owner_wrapped_dek_version' => 'integer',
     ];
 
     // -------------------------------------------------------------------------

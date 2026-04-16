@@ -131,6 +131,9 @@ class StegoWebController extends Controller
         $user = Auth::user();
 
         $stegoDocs = StegoDocument::where('user_id', $user->id)
+            ->orWhereHas('viewerGrants', function ($query) use ($user) {
+                $query->where('viewer_user_id', $user->id);
+            })
             ->where('status', 'ready')
             ->select([
                 'id',
@@ -159,6 +162,7 @@ class StegoWebController extends Controller
                 'decoding_error'  => $s->decoding_error,
                 'download_path'   => $s->download_path,
                 'created_at'     => $s->created_at?->toISOString(),
+                'is_owner'       => $s->user_id === $user->id,
             ]);
 
         return Inertia::render('Stego/Decode', [
@@ -180,12 +184,19 @@ class StegoWebController extends Controller
 
         $user = Auth::user();
 
-        // Verify ownership
-        $stegoDoc = StegoDocument::where('user_id', $user->id)
-            ->where('id', $request->stego_document_id)
+        // Find document and verify decode access via policy
+        $stegoDoc = StegoDocument::where('id', $request->stego_document_id)
             ->select(['id', 'document_id', 'user_id', 'status', 'failed_reason'])
             ->with('document')
             ->firstOrFail();
+
+        $this->authorize('decode', $stegoDoc);
+
+        if ((int) $stegoDoc->user_id !== (int) $user->id) {
+            return back()->withErrors([
+                'decode' => 'This shared stego document cannot be decoded with your account key. Ask the owner to decode and share the output file.',
+            ]);
+        }
 
         if ($stegoDoc->status !== 'ready') {
             $details = $stegoDoc->status === 'failed' && !empty($stegoDoc->failed_reason)

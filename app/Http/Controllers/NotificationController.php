@@ -31,7 +31,7 @@ class NotificationController extends Controller
                 ->where('notifiable_type', User::class)
                 ->where('dismiss_status', 'UNDISMISSED')
                 ->where('status', 'UNREAD')
-                ->latest()->limit(10)->get();
+                ->latest()->limit(10)->get(['id', 'activity_type', 'model_type', 'model_id', 'message', 'status', 'dismiss_status', 'created_at']);
 
             // Store notifications in cache
             Cache::put($cacheKey, $notifications, now()->addMinutes(5)); // Adjust expiration time as needed

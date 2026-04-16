@@ -207,6 +207,15 @@ class CloudStorageService
     }
 
     /**
+     * Get a secure download URL with appropriate expiration
+     * Default: 15 minutes for shared documents
+     */
+    public function getDownloadUrl(string $s3Key): string
+    {
+        return $this->temporaryUrl($s3Key, now()->addMinutes(15));
+    }
+
+    /**
      * Check if an S3 key exists.
      *
      * @param  string $s3Key
@@ -215,6 +224,30 @@ class CloudStorageService
     public function exists(string $s3Key): bool
     {
         return $this->disk->exists($s3Key);
+    }
+
+    /**
+     * Get file size in bytes
+     */
+    public function size(string $s3Key): int
+    {
+        return $this->disk->size($s3Key);
+    }
+
+    /**
+     * Get file mime type
+     */
+    public function mimeType(string $s3Key): string
+    {
+        return $this->disk->mimeType($s3Key);
+    }
+
+    /**
+     * Get read stream for file
+     */
+    public function readStream(string $s3Key)
+    {
+        return $this->disk->readStream($s3Key);
     }
 
     // -------------------------------------------------------------------------

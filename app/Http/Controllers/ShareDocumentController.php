@@ -78,6 +78,17 @@ class ShareDocumentController extends Controller
 
             $sender = Auth::user();
             $shareName = $request->name ?? 'Document';
+            
+            // Create internal access grant for registered users
+            if ($request->slug === 'stego') {
+                \App\Models\StegoDocumentGrant::firstOrCreate([
+                    'stego_document_id' => $request->shared_id,
+                    'viewer_user_id' => $recipient->id,
+                ], [
+                    'granted_by' => $sender->id,
+                ]);
+            }
+            
             $this->notificationService->createShareNotification(
                 $recipient,
                 $sender,
@@ -93,6 +104,17 @@ class ShareDocumentController extends Controller
             if ($recipient) {
                 $sender = Auth::user();
                 $shareName = $request->name ?? 'Document';
+                
+                // Create internal access grant for registered users
+                if ($request->slug === 'stego') {
+                    \App\Models\StegoDocumentGrant::firstOrCreate([
+                        'stego_document_id' => $request->shared_id,
+                        'viewer_user_id' => $recipient->id,
+                    ], [
+                        'granted_by' => $sender->id,
+                    ]);
+                }
+                
                 $this->notificationService->createShareNotification(
                     $recipient,
                     $sender,

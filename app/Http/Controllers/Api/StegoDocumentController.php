@@ -31,7 +31,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *   GET    /api/stego/documents                              — paginated list for authenticated user
  *   GET    /api/stego/documents/{id}                        — single doc with segments
  *   POST   /api/stego/encode                                — encrypt + embed document into carriers
- *   POST   /api/stego/decode                                — extract + decrypt → file download (owner OR granted viewer)
+ *   POST   /api/stego/decode                                — extract + decrypt (owner only)
  *   DELETE /api/stego/{id}                                  — delete (ownership enforced)
  *   GET    /api/stego                                       — SPA alias → same as index()
  *   POST   /api/stego/documents/{id}/grant                  — grant viewer access (owner only)
@@ -275,8 +275,8 @@ class StegoDocumentController extends Controller
     /**
      * Queue a decode operation for a previously encoded StegoDocument.
      *
-     * Authorization: the authenticated user must be either the **owner**
-     * (stego_documents.user_id) OR appear as a viewer in stego_document_grants.
+    * Authorization: owner-only for decode. Shared viewers can access metadata
+    * but cannot decrypt owner-encrypted payloads with their own session key.
      *
      * Reads the Master Key from the server-side session (populated at login via MKD).
      *
@@ -299,17 +299,46 @@ class StegoDocumentController extends Controller
 
         $user = Auth::user();
 
-        // Authorization: owner OR granted viewer.
+                // Authorization: owner OR viewer with any grant.
+                // Eligibility (active grant, mode checks) is enforced below with explicit 422 messages.
         $stegoDoc = StegoDocument::where(function ($q) use ($user) {
                 $q->where('user_id', $user->id)
                   ->orWhereHas('viewerGrants', fn ($g) =>
-                      $g->where('viewer_user_id', $user->id)
+                                            $g->where('viewer_user_id', $user->id)
                   );
             })
             ->where('id', $request->stego_document_id)
-            ->select(['id', 'document_id', 'user_id', 'status', 'failed_reason'])
+            ->select(['id', 'document_id', 'user_id', 'status', 'failed_reason', 'stego_mode'])
             ->with('document')
             ->firstOrFail();
+
+        // Check decode eligibility by mode and caller role
+        $isOwner = (int) $stegoDoc->user_id === (int) $user->id;
+        $isEnvelopeMode = $stegoDoc->stego_mode === 'envelope_wrapped';
+
+        // Legacy-derived DEK mode: owner-only decode
+        if (!$isEnvelopeMode && !$isOwner) {
+            return response()->json([
+                'message' => 'This stego document uses owner-only decryption. Ask the owner to decode and share the output file.',
+                'mode' => 'legacy_derived',
+            ], 422);
+        }
+
+        // Envelope-wrapped DEK mode: verify active grant for viewers
+        if ($isEnvelopeMode && !$isOwner) {
+            // Caller is a viewer; verify they have an active grant with wrapped DEK fields
+            $grant = $stegoDoc->viewerGrants()
+                ->where('viewer_user_id', $user->id)
+                ->where('grant_status', 'active')
+                ->first();
+
+            if (!$grant || empty($grant->viewer_wrapped_dek)) {
+                return response()->json([
+                    'message' => 'Grant not activated or wrapped DEK not found. Complete grant acceptance first.',
+                    'mode' => 'envelope_wrapped',
+                ], 422);
+            }
+        }
 
         if ($stegoDoc->status !== 'ready') {
             $details = $stegoDoc->status === 'failed' && !empty($stegoDoc->failed_reason)
@@ -328,7 +357,7 @@ class StegoDocumentController extends Controller
             'download_path' => null,
         ]);
 
-        // Queue the decode operation
+        // Queue the decode operation (service will resolve caller DEK based on mode + role)
         DecodeStegoDocumentJob::dispatch(
             $user->id,
             $stegoDoc->id,
@@ -441,6 +470,7 @@ class StegoDocumentController extends Controller
                 'stego_document_id' => $stegoDoc->id,
                 'viewer_user_id'    => $viewerId,
                 'granted_by'        => $ownerId,
+                'grant_status'      => 'pending',
             ]);
         } catch (UniqueConstraintViolationException) {
             return response()->json([
@@ -449,15 +479,80 @@ class StegoDocumentController extends Controller
         }
 
         return response()->json([
-            'message' => 'Access granted.',
+            'message' => 'Access grant pending. Viewer must accept to activate.',
             'grant'   => [
                 'id'                 => $grant->id,
                 'stego_document_id'  => $grant->stego_document_id,
                 'viewer_user_id'     => $grant->viewer_user_id,
+                'grant_status'       => $grant->grant_status,
                 'granted_by'         => $grant->granted_by,
+                'accepted_at'        => $grant->accepted_at?->toISOString(),
                 'created_at'         => $grant->created_at?->toISOString(),
             ],
         ], 201);
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/stego/documents/{id}/grant/{viewer_user_id}/accept
+    // -------------------------------------------------------------------------
+
+    /**
+     * Accept a pending stego document grant.
+     *
+     * Called by the viewer to activate a pending grant and provide viewer-wrapped DEK.
+     * Enables viewer to decode envelope-mode documents.
+     *
+     * @param  int $id              StegoDocument ID
+     * @param  int $viewerUserId    User accepting the grant
+     * @param  Request $request     { viewer_wrapped_dek, viewer_wrapped_dek_iv, viewer_wrapped_dek_auth_tag }
+     * @return JsonResponse         200 { message, grant } | 400 | 403 | 404 | 422
+     */
+    public function acceptGrant(Request $request, int $id, int $viewerUserId): JsonResponse
+    {
+        $caller = Auth::user();
+        
+        // Only the viewer (invited user) can accept
+        if ((int) $caller->id !== (int) $viewerUserId) {
+            return response()->json([
+                'message' => 'You can only accept grants for yourself.',
+            ], 403);
+        }
+
+        // Fetch pending grant
+        $grant = StegoDocumentGrant::where('stego_document_id', $id)
+            ->where('viewer_user_id', $viewerUserId)
+            ->where('grant_status', 'pending')
+            ->firstOrFail();
+
+        // Validate wrapped DEK payload
+        $request->validate([
+            'viewer_wrapped_dek'        => ['required', 'string'],
+            'viewer_wrapped_dek_iv'     => ['required', 'string'],
+            'viewer_wrapped_dek_auth_tag' => ['required', 'string'],
+        ]);
+
+        // Update grant to active and store viewer-wrapped DEK
+        $grant->update([
+            'grant_status'               => 'active',
+            'accepted_at'                => now(),
+            'viewer_wrapped_dek'         => $request->input('viewer_wrapped_dek'),
+            'viewer_wrapped_dek_iv'      => $request->input('viewer_wrapped_dek_iv'),
+            'viewer_wrapped_dek_auth_tag' => $request->input('viewer_wrapped_dek_auth_tag'),
+            'viewer_wrapped_dek_alg'     => 'AES-256-GCM',
+            'viewer_wrapped_dek_version' => 1,
+        ]);
+
+        return response()->json([
+            'message' => 'Grant accepted. You can now decode the document.',
+            'grant'   => [
+                'id'                 => $grant->id,
+                'stego_document_id'  => $grant->stego_document_id,
+                'viewer_user_id'     => $grant->viewer_user_id,
+                'grant_status'       => $grant->grant_status,
+                'granted_by'         => $grant->granted_by,
+                'accepted_at'        => $grant->accepted_at?->toISOString(),
+            ],
+        ], 200);
     }
 
     // -------------------------------------------------------------------------
@@ -494,12 +589,14 @@ class StegoDocumentController extends Controller
                         'name'  => $grant->viewer->name,
                         'email' => $grant->viewer->email,
                     ],
+                    'grant_status'       => $grant->grant_status,
                     'granted_by'         => $grant->granted_by,
                     'grantor'            => [
                         'id'    => $grant->grantor->id,
                         'name'  => $grant->grantor->name,
                         'email' => $grant->grantor->email,
                     ],
+                    'accepted_at'        => $grant->accepted_at?->toISOString(),
                     'created_at'         => $grant->created_at?->toISOString(),
                     'updated_at'         => $grant->updated_at?->toISOString(),
                 ];

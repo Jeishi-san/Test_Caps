@@ -5,6 +5,8 @@ import axios from 'axios';
 interface Notification {
     id: number;
     activity_type: string;
+    model_type: string;
+    model_id: number;
     message: string;
     status: 'UNREAD' | 'READ';
     dismiss_status: 'UNDISMISSED' | 'DISMISSED';
@@ -113,7 +115,7 @@ export default function NotificationBell() {
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-80 rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5">
+                <div className="absolute right-0 mt-2 w-80 rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 z-50">
                     <div className="border-b border-gray-100 px-4 py-3">
                         <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
                     </div>
@@ -132,9 +134,15 @@ export default function NotificationBell() {
                                 {notifications.map((notification) => (
                                     <li
                                         key={notification.id}
-                                        className={`px-4 py-3 hover:bg-gray-50 ${
+                                        className={`px-4 py-3 hover:bg-gray-50 cursor-pointer ${
                                             notification.status === 'UNREAD' ? 'bg-blue-50' : ''
                                         }`}
+                                        onClick={() => {
+                                            if (notification.activity_type === 'document_shared') {
+                                                setIsOpen(false);
+                                                router.visit(route('stego.decode.form', { id: notification.model_id }));
+                                            }
+                                        }}
                                     >
                                         <div className="flex items-start gap-3">
                                             <span className="text-lg">

@@ -340,4 +340,159 @@ class CryptoService
 
         return $bytes;
     }
+
+    // -------------------------------------------------------------------------
+    // Envelope Key Management (DEK wrapping for multi-user sharing)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Generate a random Document Encryption Key (DEK) for envelope-mode stego records.
+     * 
+     * Unlike derived-DEK (bound to document ID + master key), random DEK can be
+     * wrapped per user, enabling cross-user shared decode.
+     *
+     * @return string Hex-encoded random DEK (KEY_LENGTH bytes = 64 hex chars)
+     * @throws Exception If random generation fails
+     */
+    public function generateDEK(): string
+    {
+        $rawDek = $this->secureRandom(self::KEY_LENGTH);
+        return bin2hex($rawDek);
+    }
+
+    /**
+     * Wrap a DEK using a user's master key via AES-256-GCM.
+     *
+     * Enables per-user wrapping of a shared document DEK so each user (owner + viewers)
+     * can decrypt with their own master key without exposing the master key to the server.
+     *
+     * @param  string $dekHex      Hex-encoded DEK to wrap
+     * @param  string $masterKeyHex Hex-encoded user's master key
+     * @param  int    $wrapVersion Wrapping scheme version (for future rotation)
+     * @return array{ wrapped_dek: string, iv: string, auth_tag: string, algorithm: string, version: int }
+     *              All strings are base64-encoded
+     * @throws Exception If wrapping fails
+     */
+    public function wrapDekForUser(string $dekHex, string $masterKeyHex, int $wrapVersion = 1): array
+    {
+        if (empty($dekHex) || strlen($dekHex) !== 64) {
+            throw new Exception('DEK must be a 64-character hex string (32 bytes)');
+        }
+
+        if (empty($masterKeyHex) || strlen($masterKeyHex) !== 64) {
+            throw new Exception('Master key must be a 64-character hex string (32 bytes)');
+        }
+
+        try {
+            $dek = hex2bin($dekHex);
+            $masterKey = hex2bin($masterKeyHex);
+
+            if (strlen($dek) !== self::KEY_LENGTH) {
+                throw new Exception('DEK must be 32 bytes');
+            }
+
+            if (strlen($masterKey) !== self::KEY_LENGTH) {
+                throw new Exception('Master key must be 32 bytes');
+            }
+        } catch (\Exception $e) {
+            throw new Exception('Invalid hex string format: ' . $e->getMessage());
+        }
+
+        $iv = $this->secureRandom(self::IV_LENGTH);
+        $tag = '';
+
+        $wrappedDek = openssl_encrypt(
+            $dek,
+            self::CIPHER,
+            $masterKey,
+            OPENSSL_RAW_DATA,
+            $iv,
+            $tag,
+            '',
+            self::AUTH_TAG_LEN
+        );
+
+        if ($wrappedDek === false) {
+            throw new Exception('DEK wrapping failed: ' . openssl_error_string());
+        }
+
+        return [
+            'wrapped_dek' => base64_encode($wrappedDek),
+            'iv'          => base64_encode($iv),
+            'auth_tag'    => base64_encode($tag),
+            'algorithm'   => self::CIPHER,
+            'version'     => $wrapVersion,
+        ];
+    }
+
+    /**
+     * Unwrap a DEK using a user's master key via AES-256-GCM.
+     *
+     * Recovers the original DEK from a wrapped copy so the caller can decrypt the document.
+     *
+     * @param  string $wrappedDek   Base64-encoded wrapped DEK
+     * @param  string $iv           Base64-encoded IV
+     * @param  string $authTag      Base64-encoded authentication tag
+     * @param  string $masterKeyHex Hex-encoded user's master key
+     * @return string               Hex-encoded unwrapped DEK (64 hex chars)
+     * @throws Exception            If unwrapping fails or auth tag mismatch
+     */
+    public function unwrapDekForUser(
+        string $wrappedDek,
+        string $iv,
+        string $authTag,
+        string $masterKeyHex
+    ): string {
+        if (empty($wrappedDek)) {
+            throw new Exception('Wrapped DEK cannot be empty');
+        }
+
+        if (empty($masterKeyHex) || strlen($masterKeyHex) !== 64) {
+            throw new Exception('Master key must be a 64-character hex string (32 bytes)');
+        }
+
+        try {
+            $masterKey = hex2bin($masterKeyHex);
+            $wrappedBinary = base64_decode($wrappedDek, true);
+            $ivBinary = base64_decode($iv, true);
+            $tagBinary = base64_decode($authTag, true);
+
+            if (strlen($masterKey) !== self::KEY_LENGTH) {
+                throw new Exception('Master key must be 32 bytes');
+            }
+
+            if ($wrappedBinary === false || $ivBinary === false || $tagBinary === false) {
+                throw new Exception('Invalid base64 encoding in wrapped key metadata');
+            }
+
+            if (strlen($ivBinary) !== self::IV_LENGTH) {
+                throw new Exception('IV must be 12 bytes');
+            }
+
+            if (strlen($tagBinary) !== self::AUTH_TAG_LEN) {
+                throw new Exception('Auth tag must be 16 bytes');
+            }
+        } catch (\Exception $e) {
+            throw new Exception('Invalid wrapped key format: ' . $e->getMessage());
+        }
+
+        $dek = openssl_decrypt(
+            $wrappedBinary,
+            self::CIPHER,
+            $masterKey,
+            OPENSSL_RAW_DATA,
+            $ivBinary,
+            $tagBinary
+        );
+
+        if ($dek === false) {
+            throw new Exception('DEK unwrapping failed: authentication tag mismatch or corrupt data.');
+        }
+
+        if (strlen($dek) !== self::KEY_LENGTH) {
+            throw new Exception('Unwrapped DEK has unexpected length');
+        }
+
+        return bin2hex($dek);
+    }
 }
