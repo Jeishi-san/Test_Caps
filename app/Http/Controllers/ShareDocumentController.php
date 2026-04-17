@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Folder;
 use App\Models\Document;
 use App\Models\StegoDocument;
+use App\Models\StegoDocumentGrant;
 use App\Services\NotificationService;
+use App\Services\Stego\CryptoService;
 use Illuminate\Http\Request;
 use App\Models\ShareDocument;
+use App\Models\Notification;
 use App\Http\Requests\StoreShareDocumentRequest;
 use App\Http\Requests\UpdateShareDocumentRequest;
 use App\Models\User;
@@ -17,7 +20,10 @@ use Inertia\Inertia;
 
 class ShareDocumentController extends Controller
 {
-    public function __construct(private readonly NotificationService $notificationService) {}
+    public function __construct(
+        private readonly NotificationService $notificationService,
+        private readonly CryptoService $cryptoService,
+    ) {}
 
     public function getSharedDocuments($slug, $sharedid, $token)
     {
@@ -66,7 +72,7 @@ class ShareDocumentController extends Controller
         $shareDocument->setPermissionLevel(ShareDocument::PERMISSION_VIEWER);
         $shareDocument->save();
 
-        $recipientEmails = array_values(array_filter((array) ($validated['recipient_emails'] ?? [])));
+        $recipientEmails = array_values(array_unique(array_filter((array) ($validated['recipient_emails'] ?? []))));
 
         // Create notifications for selected recipients, if any.
         foreach ($recipientEmails as $email) {
@@ -81,21 +87,31 @@ class ShareDocumentController extends Controller
             
             // Create internal access grant for registered users
             if ($request->slug === 'stego') {
-                \App\Models\StegoDocumentGrant::firstOrCreate([
-                    'stego_document_id' => $request->shared_id,
-                    'viewer_user_id' => $recipient->id,
-                ], [
-                    'granted_by' => $sender->id,
-                ]);
+                $this->createOrUpdateStegoGrant(
+                    (int) $request->shared_id,
+                    $sender,
+                    $recipient
+                );
             }
             
-            $this->notificationService->createShareNotification(
-                $recipient,
-                $sender,
-                $request->slug,
-                $shareName,
-                $request->shared_id
-            );
+            $alreadyNotified = Notification::query()
+                ->where('notifiable_id', $recipient->id)
+                ->where('notifiable_type', User::class)
+                ->where('activity_type', 'document_shared')
+                ->where('model_type', $request->slug)
+                ->where('model_id', (int) $request->shared_id)
+                ->where('created_by_user_id', $sender->id)
+                ->exists();
+
+            if (!$alreadyNotified) {
+                $this->notificationService->createShareNotification(
+                    $recipient,
+                    $sender,
+                    $request->slug,
+                    $shareName,
+                    $request->shared_id
+                );
+            }
         }
 
         // Backwards compatibility with older clients sending a single email.
@@ -107,21 +123,31 @@ class ShareDocumentController extends Controller
                 
                 // Create internal access grant for registered users
                 if ($request->slug === 'stego') {
-                    \App\Models\StegoDocumentGrant::firstOrCreate([
-                        'stego_document_id' => $request->shared_id,
-                        'viewer_user_id' => $recipient->id,
-                    ], [
-                        'granted_by' => $sender->id,
-                    ]);
+                    $this->createOrUpdateStegoGrant(
+                        (int) $request->shared_id,
+                        $sender,
+                        $recipient
+                    );
                 }
                 
-                $this->notificationService->createShareNotification(
-                    $recipient,
-                    $sender,
-                    $request->slug,
-                    $shareName,
-                    $request->shared_id
-                );
+                $alreadyNotified = Notification::query()
+                    ->where('notifiable_id', $recipient->id)
+                    ->where('notifiable_type', User::class)
+                    ->where('activity_type', 'document_shared')
+                    ->where('model_type', $request->slug)
+                    ->where('model_id', (int) $request->shared_id)
+                    ->where('created_by_user_id', $sender->id)
+                    ->exists();
+
+                if (!$alreadyNotified) {
+                    $this->notificationService->createShareNotification(
+                        $recipient,
+                        $sender,
+                        $request->slug,
+                        $shareName,
+                        $request->shared_id
+                    );
+                }
             }
         }
 
@@ -172,5 +198,89 @@ class ShareDocumentController extends Controller
         $sharedDocuments = ShareDocument::where('user_id', $user->id)->get();
 
         return response()->json(['shared_documents' => $sharedDocuments], 200);
+    }
+
+    /**
+     * Auto-activate stego grants for selected recipients when possible.
+     *
+     * For both envelope-mode and legacy-mode stego documents, when the owner
+     * has an active session MKD we resolve the document DEK and wrap it with a
+     * server-managed key so the recipient can decode immediately.
+     */
+    private function createOrUpdateStegoGrant(int $stegoDocumentId, User $owner, User $recipient): void
+    {
+        $stegoDoc = StegoDocument::query()
+            ->whereKey($stegoDocumentId)
+            ->where('user_id', $owner->id)
+            ->first();
+
+        if (!$stegoDoc) {
+            return;
+        }
+
+        $attributes = [
+            'granted_by'   => $owner->id,
+            'grant_status' => 'pending',
+        ];
+
+        $ownerMasterKey = session('stego_mkd');
+        $hasOwnerKey = is_string($ownerMasterKey) && $ownerMasterKey !== '';
+
+        if ($hasOwnerKey) {
+            try {
+                $dekHex = null;
+
+                if (
+                    $stegoDoc->stego_mode === 'envelope_wrapped'
+                    && !empty($stegoDoc->owner_wrapped_dek)
+                    && !empty($stegoDoc->owner_wrapped_dek_iv)
+                    && !empty($stegoDoc->owner_wrapped_dek_auth_tag)
+                ) {
+                    $dekHex = $this->cryptoService->unwrapDekForUser(
+                        $stegoDoc->owner_wrapped_dek,
+                        $stegoDoc->owner_wrapped_dek_iv,
+                        $stegoDoc->owner_wrapped_dek_auth_tag,
+                        $ownerMasterKey
+                    );
+                } elseif ($stegoDoc->stego_mode === 'legacy_derived' || $stegoDoc->stego_mode === null) {
+                    $documentRef = $stegoDoc->document_id ? (string) $stegoDoc->document_id : (string) $stegoDoc->id;
+                    $derived = $this->cryptoService->deriveDEK(
+                        $ownerMasterKey,
+                        $documentRef,
+                        $stegoDoc->stego_dek_salt,
+                        $stegoDoc->stego_dek_iter
+                    );
+
+                    $dekHex = $derived['dek'] ?? null;
+                }
+
+                if (empty($dekHex) || !is_string($dekHex)) {
+                    throw new \RuntimeException('Unable to resolve DEK for automatic stego grant activation.');
+                }
+
+                $viewerWrapped = $this->cryptoService->wrapDekForServer($dekHex);
+
+                $attributes = [
+                    'granted_by'                  => $owner->id,
+                    'grant_status'                => 'active',
+                    'accepted_at'                 => now(),
+                    'viewer_wrapped_dek'          => $viewerWrapped['wrapped_dek'],
+                    'viewer_wrapped_dek_iv'       => $viewerWrapped['iv'],
+                    'viewer_wrapped_dek_auth_tag' => $viewerWrapped['auth_tag'],
+                    'viewer_wrapped_dek_alg'      => $viewerWrapped['algorithm'],
+                    'viewer_wrapped_dek_version'  => $viewerWrapped['version'],
+                ];
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        StegoDocumentGrant::updateOrCreate(
+            [
+                'stego_document_id' => $stegoDoc->id,
+                'viewer_user_id'    => $recipient->id,
+            ],
+            $attributes
+        );
     }
 }

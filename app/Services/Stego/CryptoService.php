@@ -495,4 +495,126 @@ class CryptoService
 
         return bin2hex($dek);
     }
+
+    /**
+     * Wrap a DEK with a server-managed key derived from APP_KEY.
+     *
+     * This supports owner-driven automatic share activation where the viewer
+     * does not perform a separate acceptance/wrapping step.
+     *
+     * @param  string $dekHex      Hex-encoded DEK (64 chars)
+     * @param  int    $wrapVersion Key-wrap version tag
+     * @return array{ wrapped_dek: string, iv: string, auth_tag: string, algorithm: string, version: int }
+     * @throws Exception
+     */
+    public function wrapDekForServer(string $dekHex, int $wrapVersion = 1): array
+    {
+        if (empty($dekHex) || strlen($dekHex) !== 64) {
+            throw new Exception('DEK must be a 64-character hex string (32 bytes)');
+        }
+
+        $dek = hex2bin($dekHex);
+        if ($dek === false || strlen($dek) !== self::KEY_LENGTH) {
+            throw new Exception('Invalid DEK hex format for server wrapping');
+        }
+
+        $serverKey = $this->serverWrapKey();
+        $iv = $this->secureRandom(self::IV_LENGTH);
+        $tag = '';
+
+        $wrappedDek = openssl_encrypt(
+            $dek,
+            self::CIPHER,
+            $serverKey,
+            OPENSSL_RAW_DATA,
+            $iv,
+            $tag,
+            '',
+            self::AUTH_TAG_LEN
+        );
+
+        if ($wrappedDek === false) {
+            throw new Exception('Server DEK wrapping failed: ' . openssl_error_string());
+        }
+
+        return [
+            'wrapped_dek' => base64_encode($wrappedDek),
+            'iv'          => base64_encode($iv),
+            'auth_tag'    => base64_encode($tag),
+            'algorithm'   => 'AES-256-GCM-SERVER',
+            'version'     => $wrapVersion,
+        ];
+    }
+
+    /**
+     * Unwrap a DEK that was wrapped with wrapDekForServer().
+     *
+     * @param  string $wrappedDek Base64 wrapped DEK
+     * @param  string $iv         Base64 IV
+     * @param  string $authTag    Base64 auth tag
+     * @return string             Hex DEK
+     * @throws Exception
+     */
+    public function unwrapDekForServer(string $wrappedDek, string $iv, string $authTag): string
+    {
+        if (empty($wrappedDek) || empty($iv) || empty($authTag)) {
+            throw new Exception('Server-wrapped DEK payload is incomplete');
+        }
+
+        $wrappedBinary = base64_decode($wrappedDek, true);
+        $ivBinary = base64_decode($iv, true);
+        $tagBinary = base64_decode($authTag, true);
+
+        if ($wrappedBinary === false || $ivBinary === false || $tagBinary === false) {
+            throw new Exception('Invalid base64 encoding in server-wrapped DEK payload');
+        }
+
+        if (strlen($ivBinary) !== self::IV_LENGTH) {
+            throw new Exception('Server-wrapped DEK IV must be 12 bytes');
+        }
+
+        if (strlen($tagBinary) !== self::AUTH_TAG_LEN) {
+            throw new Exception('Server-wrapped DEK auth tag must be 16 bytes');
+        }
+
+        $serverKey = $this->serverWrapKey();
+
+        $dek = openssl_decrypt(
+            $wrappedBinary,
+            self::CIPHER,
+            $serverKey,
+            OPENSSL_RAW_DATA,
+            $ivBinary,
+            $tagBinary
+        );
+
+        if ($dek === false || strlen($dek) !== self::KEY_LENGTH) {
+            throw new Exception('Server DEK unwrapping failed: authentication tag mismatch or corrupt data.');
+        }
+
+        return bin2hex($dek);
+    }
+
+    /**
+     * Build a stable 32-byte server wrapping key from APP_KEY.
+     */
+    private function serverWrapKey(): string
+    {
+        $appKey = (string) config('app.key', '');
+
+        if ($appKey === '') {
+            throw new Exception('APP_KEY is not configured');
+        }
+
+        if (str_starts_with($appKey, 'base64:')) {
+            $decoded = base64_decode(substr($appKey, 7), true);
+            if ($decoded === false || $decoded === '') {
+                throw new Exception('APP_KEY base64 payload is invalid');
+            }
+
+            return hash('sha256', $decoded, true);
+        }
+
+        return hash('sha256', $appKey, true);
+    }
 }

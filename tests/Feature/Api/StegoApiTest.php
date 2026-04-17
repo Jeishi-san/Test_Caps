@@ -344,21 +344,24 @@ class StegoApiTest extends TestCase
         $owner    = User::factory()->create(['username' => 'grantowner', 'role' => 'user', 'mkd_salt' => str_repeat('cd', 16)]);
         $stegoDoc = StegoDocument::factory()
             ->has(\App\Models\Document::factory()->state(['owner_id' => $owner->id]), 'document')
-            ->create(['user_id' => $owner->id]);
+            ->create([
+                'user_id'    => $owner->id,
+                'stego_mode' => 'envelope_wrapped',
+            ]);
 
-        // Grant access to $this->user (the viewer).
+        // Grant access to $this->user (the viewer) with active wrapped DEK metadata.
         \App\Models\StegoDocumentGrant::create([
-            'stego_document_id' => $stegoDoc->id,
-            'viewer_user_id'    => $this->user->id,
-            'granted_by'        => $owner->id,
+            'stego_document_id'          => $stegoDoc->id,
+            'viewer_user_id'             => $this->user->id,
+            'granted_by'                 => $owner->id,
+            'grant_status'               => 'active',
+            'accepted_at'                => now(),
+            'viewer_wrapped_dek'         => base64_encode(random_bytes(32)),
+            'viewer_wrapped_dek_iv'      => base64_encode(random_bytes(12)),
+            'viewer_wrapped_dek_auth_tag' => base64_encode(random_bytes(16)),
+            'viewer_wrapped_dek_alg'     => 'AES-256-GCM-SERVER',
+            'viewer_wrapped_dek_version' => 1,
         ]);
-
-        $mock = Mockery::mock(StegoDocumentService::class);
-        $mock->shouldReceive('decode')
-            ->once()
-            ->andReturn('recovered plaintext bytes');
-
-        $this->app->instance(StegoDocumentService::class, $mock);
 
         // $this->user is a viewer (not the owner) — decode should be authorized.
         $this->actingAs($this->user, 'sanctum')
@@ -368,6 +371,64 @@ class StegoApiTest extends TestCase
             ->assertJsonStructure([
                 'message',
                 'stego_document_id',
+            ]);
+    }
+
+    #[Test]
+    public function decode_succeeds_for_legacy_granted_viewer_with_wrapped_key(): void
+    {
+        $owner = User::factory()->create(['username' => 'legacygrantowner', 'role' => 'user']);
+
+        $stegoDoc = StegoDocument::factory()
+            ->has(\App\Models\Document::factory()->state(['owner_id' => $owner->id]), 'document')
+            ->create([
+                'user_id'        => $owner->id,
+                'status'         => 'ready',
+                'stego_mode'     => 'legacy_derived',
+                'stego_dek_salt' => str_repeat('ab', 16),
+                'stego_dek_iter' => 10000,
+            ]);
+
+        \App\Models\StegoDocumentGrant::create([
+            'stego_document_id'           => $stegoDoc->id,
+            'viewer_user_id'              => $this->user->id,
+            'granted_by'                  => $owner->id,
+            'grant_status'                => 'active',
+            'accepted_at'                 => now(),
+            'viewer_wrapped_dek'          => base64_encode(random_bytes(32)),
+            'viewer_wrapped_dek_iv'       => base64_encode(random_bytes(12)),
+            'viewer_wrapped_dek_auth_tag' => base64_encode(random_bytes(16)),
+            'viewer_wrapped_dek_alg'      => 'AES-256-GCM-SERVER',
+            'viewer_wrapped_dek_version'  => 1,
+        ]);
+
+        $this->actingAs($this->user, 'sanctum')
+            ->withSession(['stego_mkd' => str_repeat('a', 64)])
+            ->postJson('/api/stego/decode', ['stego_document_id' => $stegoDoc->id])
+            ->assertStatus(202)
+            ->assertJsonStructure([
+                'message',
+                'stego_document_id',
+            ]);
+    }
+
+    #[Test]
+    public function encode_returns_403_for_non_owned_document(): void
+    {
+        $owner = User::factory()->create(['username' => 'docowner', 'role' => 'user']);
+        $document = \App\Models\Document::factory()->create([
+            'owner_id' => $owner->id,
+        ]);
+
+        $this->actingAs($this->user, 'sanctum')
+            ->withSession(['stego_mkd' => str_repeat('a', 64)])
+            ->postJson('/api/stego/encode', [
+                'document_id' => $document->id,
+                'carriers'    => [],
+            ])
+            ->assertStatus(403)
+            ->assertJsonFragment([
+                'message' => 'You can only encode documents that you own.',
             ]);
     }
 

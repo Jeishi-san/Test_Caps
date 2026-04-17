@@ -38,7 +38,14 @@ class DocumentController extends Controller
      */
     public function index(): JsonResponse
     {
-        $docs = Document::select('id', 'name', 'extension', 'size')->latest()->paginate(50);
+        $userId = Auth::id();
+
+        $docs = Document::query()
+            ->where('owner_id', $userId)
+            ->select('id', 'name', 'extension', 'size')
+            ->latest()
+            ->paginate(50);
+
         return response()->json($docs);
     }
 

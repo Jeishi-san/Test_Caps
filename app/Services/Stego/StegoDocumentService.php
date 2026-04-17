@@ -375,6 +375,14 @@ class StegoDocumentService
                     );
                 }
 
+                if (($grant->viewer_wrapped_dek_alg ?? null) === 'AES-256-GCM-SERVER') {
+                    return $this->crypto->unwrapDekForServer(
+                        $grant->viewer_wrapped_dek,
+                        $grant->viewer_wrapped_dek_iv,
+                        $grant->viewer_wrapped_dek_auth_tag
+                    );
+                }
+
                 return $this->crypto->unwrapDekForUser(
                     $grant->viewer_wrapped_dek,
                     $grant->viewer_wrapped_dek_iv,
@@ -384,8 +392,32 @@ class StegoDocumentService
             }
         }
 
-        // Legacy-derived mode: re-derive DEK (owner-only, no sharing)
+        // Legacy-derived mode: allow active wrapped-grant viewers, otherwise owner-only
         if ($stegoDoc->stego_mode === 'legacy_derived' || $stegoDoc->stego_mode === null) {
+            if (!$isOwner) {
+                $grant = $stegoDoc->viewerGrants()
+                    ->where('viewer_user_id', $userId)
+                    ->where('grant_status', 'active')
+                    ->first();
+
+                if ($grant && !empty($grant->viewer_wrapped_dek)) {
+                    if (($grant->viewer_wrapped_dek_alg ?? null) === 'AES-256-GCM-SERVER') {
+                        return $this->crypto->unwrapDekForServer(
+                            $grant->viewer_wrapped_dek,
+                            $grant->viewer_wrapped_dek_iv,
+                            $grant->viewer_wrapped_dek_auth_tag
+                        );
+                    }
+
+                    return $this->crypto->unwrapDekForUser(
+                        $grant->viewer_wrapped_dek,
+                        $grant->viewer_wrapped_dek_iv,
+                        $grant->viewer_wrapped_dek_auth_tag,
+                        $masterKey
+                    );
+                }
+            }
+
             if (!$isOwner) {
                 throw new Exception(
                     'This stego document uses the legacy encryption model. '

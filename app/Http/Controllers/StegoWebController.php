@@ -54,7 +54,11 @@ class StegoWebController extends Controller
 
     public function encodeForm()
     {
-        $documents = Document::select('id', 'name', 'extension', 'size', 'file_path')
+        $userId = Auth::id();
+
+        $documents = Document::query()
+            ->where('owner_id', $userId)
+            ->select('id', 'name', 'extension', 'size', 'file_path')
             ->latest()
             ->get();
 
@@ -91,7 +95,16 @@ class StegoWebController extends Controller
         $user = Auth::user();
 
         // Resolve the source document path
-        $document = Document::findOrFail($request->document_id);
+        $document = Document::query()
+            ->whereKey($request->document_id)
+            ->where('owner_id', $user->id)
+            ->first();
+
+        if (!$document) {
+            return back()->withErrors([
+                'document_id' => 'You can only encode documents that you own.',
+            ]);
+        }
 
         try {
             $plaintext = $this->readDocumentPlaintext($document);

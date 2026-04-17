@@ -135,9 +135,27 @@ trait HasStegoEncoding
         // If the source document is encrypted at rest, decode to plaintext bytes
         // before feeding it to Stego so the recovered file remains usable.
         if ($document->is_encrypted) {
-            /** @var DocumentService $documentService */
-            $documentService = app(DocumentService::class);
-            return $documentService->decryptDocumentContent($document);
+            try {
+                /** @var DocumentService $documentService */
+                $documentService = app(DocumentService::class);
+                $decrypted = $documentService->decryptDocumentContent($document);
+
+                if (!is_string($decrypted) || $decrypted === '') {
+                    throw new \RuntimeException('Encrypted document decrypted to an empty payload.');
+                }
+
+                return $decrypted;
+            } catch (\Throwable $e) {
+                throw new \RuntimeException(
+                    'Unable to read encrypted source document for stego processing.',
+                    0,
+                    $e
+                );
+            }
+        }
+
+        if (empty($document->file_path)) {
+            throw new \RuntimeException('Source document has no file path.');
         }
 
         $absolutePath = public_path($document->file_path);
@@ -148,7 +166,20 @@ trait HasStegoEncoding
             );
         }
 
-        return file_get_contents($absolutePath);
+        if (!is_readable($absolutePath)) {
+            throw new \RuntimeException(
+                "Source document file is not readable on disk: {$document->name}"
+            );
+        }
+
+        $contents = file_get_contents($absolutePath);
+        if ($contents === false) {
+            throw new \RuntimeException(
+                "Unable to read source document file from disk: {$document->name}"
+            );
+        }
+
+        return $contents;
     }
 
     /**

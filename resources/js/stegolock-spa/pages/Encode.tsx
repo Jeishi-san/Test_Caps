@@ -5,6 +5,13 @@ import SpaLayout from '../components/SpaLayout';
 
 interface Document { id: number; name: string; extension: string; size: number }
 interface QualityMetric { carrier: string; psnr: number | null; threshold_40db: boolean }
+interface StegoEncodeStatusResponse {
+    id: number;
+    status: 'pending' | 'ready' | 'failed';
+    failed_reason?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+}
 type Step = 1 | 2 | 3;  // 3 = results
 
 export default function Encode() {
@@ -17,11 +24,90 @@ export default function Encode() {
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [qualityMetrics, setQualityMetrics] = useState<QualityMetric[]>([]);
+    const [stegoDocumentId, setStegoDocumentId] = useState<number | null>(null);
+    const [encodeStatus, setEncodeStatus] = useState<'idle' | 'pending' | 'ready' | 'failed'>('idle');
+    const [encodeElapsedSeconds, setEncodeElapsedSeconds] = useState<number | null>(null);
+    const [encodeProcessingTimeSeconds, setEncodeProcessingTimeSeconds] = useState<number | null>(null);
+    const [encodeFailedReason, setEncodeFailedReason] = useState<string | null>(null);
+    const [encodeQueuedMessage, setEncodeQueuedMessage] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
+    const pollTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         axios.get('/api/documents').then((r) => setDocuments(r.data.data ?? r.data)).catch(console.error);
     }, []);
+
+    useEffect(() => {
+        return () => {
+            if (pollTimerRef.current !== null) {
+                window.clearInterval(pollTimerRef.current);
+                pollTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    const formatSeconds = (seconds: number | null): string => {
+        if (seconds === null || !Number.isFinite(seconds)) return '—';
+        if (seconds < 60) return `${seconds.toFixed(2)}s`;
+        const mins = Math.floor(seconds / 60);
+        const rem = seconds % 60;
+        return `${mins}m ${rem.toFixed(1)}s`;
+    };
+
+    const deriveSeconds = (createdAt?: string | null, updatedAt?: string | null): number | null => {
+        if (!createdAt || !updatedAt) return null;
+        const created = new Date(createdAt).getTime();
+        const updated = new Date(updatedAt).getTime();
+        if (!Number.isFinite(created) || !Number.isFinite(updated) || updated < created) return null;
+        return (updated - created) / 1000;
+    };
+
+    const deriveElapsedNow = (createdAt?: string | null): number | null => {
+        if (!createdAt) return null;
+        const created = new Date(createdAt).getTime();
+        if (!Number.isFinite(created)) return null;
+        return Math.max(0, (Date.now() - created) / 1000);
+    };
+
+    const stopPolling = () => {
+        if (pollTimerRef.current !== null) {
+            window.clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+        }
+    };
+
+    const pollEncodeStatus = async (id: number) => {
+        try {
+            const response = await axios.get<StegoEncodeStatusResponse>(`/api/stego/documents/${id}`);
+            const payload = response.data;
+
+            const status = payload.status;
+            setEncodeStatus(status);
+
+            if (status === 'ready' || status === 'failed') {
+                const duration = deriveSeconds(payload.created_at, payload.updated_at);
+                setEncodeProcessingTimeSeconds(duration);
+                setEncodeElapsedSeconds(duration);
+                setEncodeFailedReason(payload.failed_reason ?? null);
+                stopPolling();
+                return;
+            }
+
+            setEncodeElapsedSeconds(deriveElapsedNow(payload.created_at));
+        } catch (error: any) {
+            stopPolling();
+            setEncodeStatus('failed');
+            setEncodeFailedReason(error?.response?.data?.message ?? 'Failed to fetch encoding status.');
+        }
+    };
+
+    const startPolling = (id: number) => {
+        stopPolling();
+        void pollEncodeStatus(id);
+        pollTimerRef.current = window.setInterval(() => {
+            void pollEncodeStatus(id);
+        }, 1500);
+    };
 
     const addFiles = (files: FileList | null) => {
         if (!files) return;
@@ -57,7 +143,20 @@ export default function Encode() {
             const res = await axios.post('/api/stego/encode', fd, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
+
+            const queuedId = Number(res.data?.stego_document_id ?? 0);
+            setStegoDocumentId(Number.isFinite(queuedId) && queuedId > 0 ? queuedId : null);
             setQualityMetrics(res.data.quality_metrics ?? []);
+            setEncodeStatus('pending');
+            setEncodeElapsedSeconds(0);
+            setEncodeProcessingTimeSeconds(null);
+            setEncodeFailedReason(null);
+            setEncodeQueuedMessage(res.data?.message ?? 'Encoding queued. Waiting for completion...');
+
+            if (Number.isFinite(queuedId) && queuedId > 0) {
+                startPolling(queuedId);
+            }
+
             setStep(3);
         } catch (e: any) {
             if (e.response?.status === 401) {
@@ -65,6 +164,7 @@ export default function Encode() {
             } else {
                 setErrors(e.response?.data?.errors ?? { encode: e.response?.data?.message ?? 'Encoding failed.' });
             }
+            stopPolling();
             setStep(2);
         } finally {
             setLoading(false);
@@ -174,11 +274,56 @@ export default function Encode() {
 
                     {step === 3 && (
                         <div>
-                            <div className="mb-4 flex items-center gap-2 text-green-700">
-                                <span className="text-2xl">âœ…</span>
-                                <h2 className="font-semibold text-lg">Document encoded successfully!</h2>
+                            <div className={`mb-4 flex items-center gap-2 ${encodeStatus === 'failed' ? 'text-red-700' : encodeStatus === 'ready' ? 'text-green-700' : 'text-amber-700'}`}>
+                                <span className="text-2xl">
+                                    {encodeStatus === 'failed' ? 'âœ•' : encodeStatus === 'ready' ? 'âœ…' : 'â³'}
+                                </span>
+                                <h2 className="font-semibold text-lg">
+                                    {encodeStatus === 'failed'
+                                        ? 'Encoding failed'
+                                        : encodeStatus === 'ready'
+                                        ? 'Document encoded successfully!'
+                                        : 'Encoding in progress'}
+                                </h2>
                             </div>
                             <p className="mb-4 text-sm text-gray-500">The document has been encrypted with AES-256-GCM and hidden across your carrier images using LSB steganography.</p>
+
+                            <div className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="font-medium text-indigo-900">Encoding status</span>
+                                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                        encodeStatus === 'ready'
+                                            ? 'bg-green-100 text-green-700'
+                                            : encodeStatus === 'failed'
+                                            ? 'bg-red-100 text-red-700'
+                                            : 'bg-amber-100 text-amber-700'
+                                    }`}>
+                                        {encodeStatus === 'ready'
+                                            ? 'Ready'
+                                            : encodeStatus === 'failed'
+                                            ? 'Failed'
+                                            : 'Processing'}
+                                    </span>
+                                </div>
+                                {stegoDocumentId && (
+                                    <p className="mt-2 text-xs text-indigo-700">Stego Document ID: {stegoDocumentId}</p>
+                                )}
+                                {encodeQueuedMessage && encodeStatus === 'pending' && (
+                                    <p className="mt-2 text-indigo-700">{encodeQueuedMessage}</p>
+                                )}
+                                <p className="mt-2 text-indigo-900">
+                                    Processing time: <strong>{formatSeconds(encodeStatus === 'pending' ? encodeElapsedSeconds : encodeProcessingTimeSeconds)}</strong>
+                                </p>
+                                {encodeStatus === 'pending' && (
+                                    <p className="mt-1 text-xs text-indigo-700">Timer updates live while encoding is running.</p>
+                                )}
+                                {encodeStatus === 'ready' && (
+                                    <p className="mt-1 text-xs text-green-700">Encoding completed. Use this value to compare before/after optimization changes.</p>
+                                )}
+                                {encodeStatus === 'failed' && (
+                                    <p className="mt-1 text-xs text-red-700">{encodeFailedReason ?? 'Encoding failed during processing.'}</p>
+                                )}
+                            </div>
 
                             {qualityMetrics.length > 0 && (
                                 <div className="mb-4">

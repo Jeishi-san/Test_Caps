@@ -10,6 +10,7 @@ use App\Models\Document;
 use App\Models\StegoCarrier;
 use App\Models\StegoDocument;
 use App\Models\StegoDocumentGrant;
+use App\Models\Notification;
 use App\Models\User;
 use App\Services\Stego\CloudStorageService;
 use App\Services\Stego\StegoDocumentService;
@@ -225,8 +226,17 @@ class StegoDocumentController extends Controller
             'carriers.*'  => ['file', 'mimes:png,bmp,jpeg,jpg', 'max:51200'],
         ]);
 
-        $user     = Auth::user();
-        $document = Document::findOrFail($request->document_id);
+        $user = Auth::user();
+        $document = Document::query()
+            ->whereKey($request->document_id)
+            ->where('owner_id', $user->id)
+            ->first();
+
+        if (!$document) {
+            return response()->json([
+                'message' => 'You can only encode documents that you own.',
+            ], 403);
+        }
 
         try {
             $plaintext = $this->readDocumentPlaintext($document);
@@ -315,23 +325,29 @@ class StegoDocumentController extends Controller
         // Check decode eligibility by mode and caller role
         $isOwner = (int) $stegoDoc->user_id === (int) $user->id;
         $isEnvelopeMode = $stegoDoc->stego_mode === 'envelope_wrapped';
+        $grant = null;
+        if (!$isOwner) {
+            $grant = $stegoDoc->viewerGrants()
+                ->where('viewer_user_id', $user->id)
+                ->where('grant_status', 'active')
+                ->first();
+        }
 
-        // Legacy-derived DEK mode: owner-only decode
+        // Legacy-derived DEK mode: owner-only unless an active wrapped grant exists
         if (!$isEnvelopeMode && !$isOwner) {
-            return response()->json([
-                'message' => 'This stego document uses owner-only decryption. Ask the owner to decode and share the output file.',
-                'mode' => 'legacy_derived',
-            ], 422);
+            if ($grant && !empty($grant->viewer_wrapped_dek)) {
+                // Allow decode for active wrapped-grant viewers.
+            } else {
+                return response()->json([
+                    'message' => 'This stego document uses owner-only decryption. Ask the owner to decode and share the output file.',
+                    'mode' => 'legacy_derived',
+                ], 422);
+            }
         }
 
         // Envelope-wrapped DEK mode: verify active grant for viewers
         if ($isEnvelopeMode && !$isOwner) {
             // Caller is a viewer; verify they have an active grant with wrapped DEK fields
-            $grant = $stegoDoc->viewerGrants()
-                ->where('viewer_user_id', $user->id)
-                ->where('grant_status', 'active')
-                ->first();
-
             if (!$grant || empty($grant->viewer_wrapped_dek)) {
                 return response()->json([
                     'message' => 'Grant not activated or wrapped DEK not found. Complete grant acceptance first.',
@@ -363,6 +379,20 @@ class StegoDocumentController extends Controller
             $stegoDoc->id,
             $masterKey
         );
+
+        if (!$isOwner) {
+            Notification::create([
+                'notifiable_id'      => $stegoDoc->user_id,
+                'notifiable_type'    => User::class,
+                'activity_type'      => 'stego_decode_requested',
+                'model_type'         => StegoDocument::class,
+                'model_id'           => $stegoDoc->id,
+                'message'            => "{$user->name} requested decode for your shared stego document.",
+                'status'             => 'UNREAD',
+                'dismiss_status'     => 'UNDISMISSED',
+                'created_by_user_id' => $user->id,
+            ]);
+        }
 
         return response()->json([
             'message' => 'Decoding queued. Check the stego document status to track progress.',
@@ -651,7 +681,8 @@ class StegoDocumentController extends Controller
 
             // AES-GCM ciphertext length equals compressed plaintext length.
             $requiredBytes = strlen($compressed);
-        } catch (\RuntimeException $e) {
+        } catch (\Throwable $e) {
+            report($e);
             return response()->json([
                 'message' => $e->getMessage(),
             ], 422);
