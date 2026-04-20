@@ -177,8 +177,27 @@ class FolderController extends Controller
     public function getParentFolders()
     {
         $folders = Folder::with(['categories'])->whereNull('parent_id')->get();
-        
+
         // Return JSON data for React frontend instead of rendered HTML
         return response()->json(['folders' => $folders]);
+    }
+
+    public function toggleStar(Request $request)
+    {
+        $validated = $request->validate([
+            'folder_id' => ['required', 'integer', 'exists:folders,id'],
+        ]);
+
+        $folder = Folder::findOrFail($validated['folder_id']);
+        $this->authorize('update', $folder);
+
+        $folder->update([
+            'is_starred' => !$folder->is_starred,
+        ]);
+
+        return response()->json([
+            'message' => $folder->is_starred ? 'Folder starred successfully' : 'Folder unstarred successfully',
+            'is_starred' => $folder->is_starred,
+        ]);
     }
 }

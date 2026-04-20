@@ -453,4 +453,23 @@ class DocumentController extends Controller
 
         return response()->json(['message' => 'Document updated successfully', 'url' => route('getFiles', $folderId)], 200);
     }
+
+    public function toggleStar(Request $request)
+    {
+        $validated = $request->validate([
+            'document_id' => ['required', 'integer', 'exists:documents,id'],
+        ]);
+
+        $document = Document::findOrFail($validated['document_id']);
+        $this->authorize('update', $document);
+
+        $document->update([
+            'is_starred' => !$document->is_starred,
+        ]);
+
+        return response()->json([
+            'message' => $document->is_starred ? 'Document starred successfully' : 'Document unstarred successfully',
+            'is_starred' => $document->is_starred,
+        ]);
+    }
 }

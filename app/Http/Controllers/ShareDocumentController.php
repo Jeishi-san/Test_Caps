@@ -27,6 +27,11 @@ class ShareDocumentController extends Controller
 
     public function getSharedDocuments($slug, $sharedid, $token)
     {
+        // Require authentication for shared documents
+        if (!Auth::check()) {
+            return redirect()->guest(route('login'))->with('intended', request()->fullUrl());
+        }
+
         $shareDocument = ShareDocument::whereSlug($slug)->whereToken($token)->whereSharedId($sharedid)->first();
 
         abort_if(!$shareDocument, 404, 'Not Found');

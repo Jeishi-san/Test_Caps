@@ -35,7 +35,7 @@ class Document extends Model
     }
 
     protected $fillable = [
-        'name', 'original_name', 'file_path', 'size', 'extension', 'folder_id', 'visibility', 'share', 'download', 'email',
+        'name', 'original_name', 'file_path', 'size', 'extension', 'folder_id', 'visibility', 'is_starred', 'share', 'download', 'email',
         'url', 'owner_id', 'document_date', 'position',
         'ingest_status', 'ingest_error',
         // AES-256-GCM encryption metadata

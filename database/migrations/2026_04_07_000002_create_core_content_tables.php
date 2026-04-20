@@ -25,6 +25,7 @@ return new class extends Migration
                 $table->unsignedBigInteger('parent_id')->nullable();
                 $table->foreign('parent_id')->references('id')->on('folders')->onDelete('cascade');
                 $table->enum('visibility', ['public', 'private'])->default('public');
+                $table->boolean('is_starred')->default(false);
                 $table->string('background_color')->nullable();
                 $table->string('foreground_color')->nullable();
                 $table->timestamps();
@@ -48,6 +49,7 @@ return new class extends Migration
                     ->onDelete('cascade')
                     ->onUpdate('cascade');
                 $table->enum('visibility', ['public', 'private'])->default('public');
+                $table->boolean('is_starred')->default(false);
                 $table->bigInteger('share')->default(0);
                 $table->bigInteger('download')->default(0);
                 $table->string('email')->nullable();

@@ -48,6 +48,12 @@ export default function Authenticated({
                                 >
                                     Folders
                                 </NavLink>
+                                <NavLink
+                                    href={route('starred.index', undefined, false)}
+                                    active={route().current('starred.index')}
+                                >
+                                    ⭐ Starred
+                                </NavLink>
                                 {(user.role === 'admin' || user.role === 'owner') && (
                                     <>
                                         <NavLink
@@ -166,6 +172,9 @@ export default function Authenticated({
                                         <Dropdown.Link href={route('profile.edit', undefined, false)}>
                                             Profile
                                         </Dropdown.Link>
+                                        <Dropdown.Link href={route('settings.index', undefined, false)}>
+                                            ⚙️ Settings
+                                        </Dropdown.Link>
                                         <Dropdown.Link href={route('stego.tokens', undefined, false)}>
                                             API Tokens
                                         </Dropdown.Link>
@@ -219,6 +228,9 @@ export default function Authenticated({
                         <ResponsiveNavLink href={route('folders.index', undefined, false)} active={route().current('folders.index')}>
                             Folders
                         </ResponsiveNavLink>
+                        <ResponsiveNavLink href={route('starred.index', undefined, false)} active={route().current('starred.index')}>
+                            ⭐ Starred
+                        </ResponsiveNavLink>
                         {(user.role === 'admin' || user.role === 'owner') && (
                             <>
                                 <ResponsiveNavLink href={route('tags.index', undefined, false)} active={route().current('tags.index')}>
@@ -268,6 +280,7 @@ export default function Authenticated({
                         </div>
                         <div className="mt-3 space-y-1">
                             <ResponsiveNavLink href={route('profile.edit', undefined, false)}>Profile</ResponsiveNavLink>
+                            <ResponsiveNavLink href={route('settings.index', undefined, false)}>⚙️ Settings</ResponsiveNavLink>
                             <ResponsiveNavLink method="post" href={route('logout', undefined, false)} as="button">
                                 Log Out
                             </ResponsiveNavLink>

@@ -19,6 +19,8 @@ use App\Http\Controllers\FileRequestController;
 use App\Http\Controllers\ShareDocumentController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\DownloadController;
+use App\Http\Controllers\StarredController;
+use App\Http\Controllers\SettingsController;
 use Inertia\Inertia;
 
 // Root entry point - guests see welcome page, auth users go to documents
@@ -134,6 +136,15 @@ Route::middleware('auth')->group(function () {
 
     // Search Route
     Route::get('/search', [SearchController::class, 'index'])->name('search.index');
+
+    // Starred Routes
+    Route::get('/starred', [StarredController::class, 'index'])->name('starred.index');
+    Route::post('/documents/toggle-star', [DocumentController::class, 'toggleStar'])->name('documents.toggleStar');
+    Route::post('/folders/toggle-star', [FolderController::class, 'toggleStar'])->name('folders.toggleStar');
+
+    // Settings Routes
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+    Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
 
     Route::resource('workspaces', FolderController::class);
 

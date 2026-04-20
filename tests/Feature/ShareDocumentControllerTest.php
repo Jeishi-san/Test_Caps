@@ -244,4 +244,46 @@ class ShareDocumentControllerTest extends TestCase
             'type' => 'share'
         ]);
     }
+
+    /** @test */
+    public function unauthenticated_users_are_redirected_to_login_for_shared_documents()
+    {
+        $document = Document::factory()->create();
+        $share = ShareDocument::factory()->create([
+            'slug' => 'document',
+            'shared_id' => $document->id,
+            'visibility' => 'public'
+        ]);
+
+        $response = $this->get(route('getSharedDocuments', [
+            'slug' => $share->slug,
+            'id' => $share->shared_id,
+            'token' => $share->token
+        ]));
+
+        $response->assertRedirect(route('login'));
+        $this->assertEquals(request()->fullUrl(), session('url.intended'));
+    }
+
+    /** @test */
+    public function authenticated_users_can_access_shared_documents()
+    {
+        $user = User::factory()->create();
+        $document = Document::factory()->create();
+        $share = ShareDocument::factory()->create([
+            'slug' => 'document',
+            'shared_id' => $document->id,
+            'visibility' => 'public'
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('getSharedDocuments', [
+                'slug' => $share->slug,
+                'id' => $share->shared_id,
+                'token' => $share->token
+            ]))
+            ->assertStatus(200)
+            ->assertViewIs('shares.index')
+            ->assertViewHas('shareDocument', $share);
+    }
 }

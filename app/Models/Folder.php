@@ -9,7 +9,7 @@ class Folder extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'parent_id', 'visibility', 'background_color', 'foreground_color', 'category_id', 'position'];
+    protected $fillable = ['name', 'parent_id', 'visibility', 'is_starred', 'background_color', 'foreground_color', 'category_id', 'position'];
 
 
 
