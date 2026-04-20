@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -134,6 +135,154 @@ class Document extends Model
     public function isWatchedByUser($userId)
     {
         return $this->watchers()->where('user_id', $userId)->exists();
+    }
+
+    // -------------------------------------------------------------------------
+    // Query Scopes - Fix N+1 Query Problems
+    // -------------------------------------------------------------------------
+
+    /**
+     * Scope to get all documents accessible by a user.
+     * Combines owned documents, shared documents, and documents in shared folders.
+     * 
+     * Usage: Document::accessibleBy($user)->get()
+     */
+    public function scopeAccessibleBy($query, User $user)
+    {
+        return $query->where(function ($q) use ($user) {
+            // User's own documents
+            $q->where('owner_id', $user->id)
+              // Documents directly shared with user
+              ->orWhereIn('id', function ($subq) {
+                  $subq->select('share_id')
+                       ->from('share_documents')
+                       ->where('user_id', Auth::id());
+              })
+              // Documents in folders shared with user
+              ->orWhereIn('folder_id', function ($subq) {
+                  $subq->select('share_id')
+                       ->from('share_documents')
+                       ->where('user_id', Auth::id())
+                       ->where('slug', 'folder');
+              });
+            
+            // Admin can see all documents
+            if ($user->isAdmin()) {
+                $q->orWhere('visibility', 'private');
+            }
+        });
+    }
+
+    /**
+     * Scope to get only publicly visible documents.
+     * 
+     * Usage: Document::public()->get()
+     */
+    public function scopePublic($query)
+    {
+        return $query->where('visibility', 'public');
+    }
+
+    /**
+     * Scope to get only private documents.
+     * 
+     * Usage: Document::private()->get()
+     */
+    public function scopePrivate($query)
+    {
+        return $query->where('visibility', 'private');
+    }
+
+    /**
+     * Scope to get documents owned by a specific user.
+     * 
+     * Usage: Document::ownedBy($user)->get()
+     */
+    public function scopeOwnedBy($query, User $user)
+    {
+        return $query->where('owner_id', $user->id);
+    }
+
+    /**
+     * Scope to get documents directly shared with a user.
+     * 
+     * Usage: Document::sharedDirectlyWith($user)->get()
+     */
+    public function scopeSharedDirectlyWith($query, User $user)
+    {
+        return $query->whereIn('id', function ($subq) {
+            $subq->select('share_id')
+                 ->from('share_documents')
+                 ->where('user_id', $user->id)
+                 ->where('slug', '!=', 'folder');
+        });
+    }
+
+    /**
+     * Scope to get documents in folders shared with a user.
+     * 
+     * Usage: Document::inSharedFolders($user)->get()
+     */
+    public function scopeInSharedFolders($query, User $user)
+    {
+        return $query->whereIn('folder_id', function ($subq) {
+            $subq->select('share_id')
+                 ->from('share_documents')
+                 ->where('user_id', $user->id)
+                 ->where('slug', 'folder');
+        });
+    }
+
+    /**
+     * Scope to get starred documents.
+     * 
+     * Usage: Document::starred()->get()
+     */
+    public function scopeStarred($query)
+    {
+        return $query->where('is_starred', true);
+    }
+
+    /**
+     * Scope to get documents watched by a user.
+     * 
+     * Usage: Document::watchedBy($user)->get()
+     */
+    public function scopeWatchedBy($query, User $user)
+    {
+        return $query->whereHas('watchers', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+        });
+    }
+
+    /**
+     * Scope to get recently updated documents.
+     * 
+     * Usage: Document::recent()->get()
+     */
+    public function scopeRecent($query)
+    {
+        return $query->orderByDesc('updated_at');
+    }
+
+    /**
+     * Scope to get documents in a specific folder.
+     * 
+     * Usage: Document::inFolder($folderId)->get()
+     */
+    public function scopeInFolder($query, int $folderId)
+    {
+        return $query->where('folder_id', $folderId);
+    }
+
+    /**
+     * Scope to get documents encrypted at rest.
+     * 
+     * Usage: Document::encrypted()->get()
+     */
+    public function scopeEncrypted($query)
+    {
+        return $query->where('is_encrypted', true);
     }
 
     // Method to delete associated file from public path

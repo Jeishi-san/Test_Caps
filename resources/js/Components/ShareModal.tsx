@@ -2,16 +2,9 @@ import { useEffect, useState } from 'react';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import type { ShareModalComponentProps } from '@/types/components';
+import type { ShareRecipientUser } from '@/types/entities';
 import axios from 'axios';
-
-interface ShareModalProps {
-  show: boolean;
-  onClose: () => void;
-  documentId: number;
-  documentName: string;
-  slug?: string;
-  onSuccess?: () => void;
-}
 
 export default function ShareModal({
   show,
@@ -20,7 +13,7 @@ export default function ShareModal({
   documentName,
   slug = 'document',
   onSuccess,
-}: ShareModalProps) {
+}: ShareModalComponentProps) {
   const [expirationDate, setExpirationDate] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,8 +21,8 @@ export default function ShareModal({
   const [shareLink, setShareLink] = useState('');
   const [showLink, setShowLink] = useState(false);
   const [userQuery, setUserQuery] = useState('');
-  const [userResults, setUserResults] = useState<{ id: number; name: string; email: string; role: string }[]>([]);
-  const [selectedUsers, setSelectedUsers] = useState<{ id: number; name: string; email: string; role: string }[]>([]);
+  const [userResults, setUserResults] = useState<ShareRecipientUser[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<ShareRecipientUser[]>([]);
 
   useEffect(() => {
     if (!show) {
@@ -66,7 +59,7 @@ export default function ShareModal({
     return () => window.clearTimeout(timer);
   }, [show, userQuery]);
 
-  const handleAddRecipient = (user: { id: number; name: string; email: string; role: string }) => {
+  const handleAddRecipient = (user: ShareRecipientUser) => {
     setSelectedUsers((current) => {
       if (current.some((selected) => selected.id === user.id)) {
         return current;

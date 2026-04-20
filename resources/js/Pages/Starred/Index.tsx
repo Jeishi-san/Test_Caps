@@ -2,43 +2,12 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { PageProps } from '@/types';
 import { useState } from 'react';
+import type { DocumentEntity, FolderEntity } from '@/types/entities';
 import axios from 'axios';
 
-interface Document {
-    id: number;
-    name: string;
-    file_path: string;
-    extension: string;
-    size: number;
-    visibility: string;
-    folder_id: number | null;
-    created_at: string;
-    updated_at: string;
-    is_stegoed?: boolean;
-    is_starred?: boolean;
-    tags?: Array<{
-        id: number;
-        name: string;
-    }>;
-}
-
-interface Folder {
-    id: number;
-    name: string;
-    parent_id: number | null;
-    visibility: string;
-    is_starred?: boolean;
-    updated_at: string;
-    categories?: Array<{
-        id: number;
-        name: string;
-    }>;
-    subfolders?: Folder[];
-}
-
 interface StarredPageProps extends PageProps {
-    starredDocuments: Document[];
-    starredFolders: Folder[];
+    starredDocuments: DocumentEntity[];
+    starredFolders: FolderEntity[];
 }
 
 export default function Index({
@@ -128,7 +97,7 @@ export default function Index({
                                                 </button>
                                             </div>
                                             <div className="text-sm text-gray-500 dark:text-gray-400">
-                                                Updated {new Date(folder.updated_at).toLocaleDateString()}
+                                                Updated {folder.updated_at ? new Date(folder.updated_at).toLocaleDateString() : 'N/A'}
                                             </div>
                                         </div>
                                     </div>
@@ -168,7 +137,7 @@ export default function Index({
                                                     {formatFileSize(document.size)} • {document.extension?.toUpperCase()}
                                                 </div>
                                                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                                                    Updated {new Date(document.updated_at).toLocaleDateString()}
+                                                    Updated {document.updated_at ? new Date(document.updated_at).toLocaleDateString() : 'N/A'}
                                                 </div>
                                                 {document.tags && document.tags.length > 0 && (
                                                     <div className="flex flex-wrap gap-1">

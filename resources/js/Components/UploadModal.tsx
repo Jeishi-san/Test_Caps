@@ -4,28 +4,17 @@ import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import SelectedFilesList from '@/Components/upload/SelectedFilesList';
+import UploadProgress from '@/Components/upload/UploadProgress';
+import type { UploadModalBaseProps } from '@/types/components';
 import { DIRECT_UPLOAD_MAX_FILE_BYTES, uploadFileDirect } from '@/utils/directUpload';
-
-interface Folder {
-    id: number;
-    name: string;
-    parent_id: number | null;
-}
-
-interface UploadModalProps {
-    show: boolean;
-    onClose: () => void;
-    folders: Folder[];
-    currentFolderId?: number;
-    onSuccess?: () => void;
-}
 
 const MAX_FILE_SIZE_BYTES = DIRECT_UPLOAD_MAX_FILE_BYTES;
 
 const getOversizedFiles = (fileList: FileList) =>
     Array.from(fileList).filter((file) => file.size > MAX_FILE_SIZE_BYTES);
 
-export default function UploadModal({ show, onClose, folders = [], currentFolderId, onSuccess }: UploadModalProps) {
+export default function UploadModal({ show, onClose, folders = [], currentFolderId, onSuccess }: UploadModalBaseProps) {
     const [files, setFiles] = useState<FileList | null>(null);
     const [folderName, setFolderName] = useState('');
     const [folderId, setFolderId] = useState(currentFolderId || '');
@@ -224,27 +213,13 @@ export default function UploadModal({ show, onClose, folders = [], currentFolder
                     </label>
                 </div>
 
-                {files && files.length > 0 && (
-                    <div className="mt-4 p-3 bg-gray-50 rounded">
-                        <p className="text-sm font-medium text-gray-700">
-                            Selected: {files.length} file{files.length !== 1 ? 's' : ''}
-                        </p>
-                    </div>
-                )}
+                {files && files.length > 0 && <SelectedFilesList files={files} />}
 
                 {uploading && (
-                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
-                        <p className="text-sm text-blue-700">
-                            Uploading {activeFileLabel !== '' ? activeFileLabel : 'file'}...
-                        </p>
-                        <div className="mt-2 h-2 w-full bg-blue-100 rounded overflow-hidden">
-                            <div
-                                className="h-2 bg-blue-500 transition-all"
-                                style={{ width: `${progressPercent}%` }}
-                            />
-                        </div>
-                        <p className="mt-1 text-xs text-blue-700">{progressPercent}%</p>
-                    </div>
+                    <UploadProgress
+                        progressPercent={progressPercent}
+                        activeFileLabel={activeFileLabel}
+                    />
                 )}
 
                 <div className="mt-6 flex justify-end gap-3">

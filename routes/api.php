@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\DocumentController as ApiDocumentController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StegoDocumentController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\DocumentFileController;
 use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 
@@ -188,6 +189,17 @@ Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
     Route::get('/documents/{id}', [ApiDocumentController::class, 'show'])->name('api.documents.show')
         ->whereNumber('id');
     Route::get('/documents',      [ApiDocumentController::class, 'index'])->name('api.documents.index');
+
+    // Phase 2 file operation endpoints (controller shared with web layer).
+    Route::prefix('documents/files')->name('api.documents.files.')->group(function () {
+        Route::get('/folders/{folder}', [DocumentFileController::class, 'index'])->name('index');
+        Route::post('/upload', [DocumentFileController::class, 'upload'])->name('upload');
+        Route::get('/{document}/download', [DocumentFileController::class, 'download'])->name('download');
+        Route::get('/{document}/view', [DocumentFileController::class, 'view'])->name('view');
+        Route::get('/filter-by-tags', [DocumentFileController::class, 'filterByTag'])->name('filterByTag');
+        Route::post('/visibility', [DocumentFileController::class, 'updateVisibility'])->name('updateVisibility');
+        Route::post('/order', [DocumentFileController::class, 'updateOrder'])->name('updateOrder');
+    });
 
     // Role management endpoints
     Route::get('/roles', [RoleController::class, 'index'])->name('api.roles.index');

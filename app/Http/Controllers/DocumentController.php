@@ -2,29 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AccessLog;
 use App\Models\User;
 use App\Models\Folder;
 use App\Models\Document;
-use App\Models\ShareDocument;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use App\Http\Requests\StoreDocumentRequest;
 use App\Http\Requests\UpdateDocumentRequest;
 use App\Services\DocumentService;
 use App\Models\DocumentWatcher;
 use App\Models\Notification;
-use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Illuminate\Http\JsonResponse;
 
 
 class DocumentController extends Controller
 {
-
-    public function __construct(protected DocumentService $documentService)
-    {
+    public function __construct(
+        protected DocumentService $documentService,
+        protected DocumentFileController $documentFileController,
+    ) {
     }
 
 
@@ -32,30 +29,9 @@ class DocumentController extends Controller
     {
         $user = Auth::user();
         
-        // Get all documents the user has permission to view
+        // Get all documents the user has permission to view using optimized scope
         $documents = Document::with('tags')
-            ->where(function ($query) use ($user) {
-                // Owner's documents
-                $query->where('owner_id', $user->id)
-                    // Shared documents
-                    ->orWhereIn('id', function ($subquery) use ($user) {
-                        $subquery->select('share_id')
-                            ->from('share_documents')
-                            ->where('user_id', $user->id);
-                    });
-                    
-                // Admin can see all documents
-                if ($user->isAdmin()) {
-                    $query->orWhere('visibility', 'private');
-                }
-                
-                // Check for documents in shared folders
-                $sharedFolderIds = ShareDocument::where('user_id', $user->id)
-                    ->where('slug', 'folder')
-                    ->pluck('share_id');
-                    
-                $query->orWhereIn('folder_id', $sharedFolderIds);
-            })
+            ->accessibleBy($user)
             ->latest()
             ->get();
 
@@ -74,67 +50,25 @@ class DocumentController extends Controller
 
     public function updateDocumentOrder(Request $request)
     {
-        $validated = $request->validate([
-            'folder_id' => ['required', 'exists:folders,id'],
-            'document_ids' => ['required', 'array', 'min:1'],
-            'document_ids.*' => ['integer', 'exists:documents,id'],
-        ]);
-
-        try {
-            DB::transaction(function () use ($validated) {
-                $this->documentService->setUpdateDocumentOrder($validated['folder_id'], $validated['document_ids']);
-            });
-
-            return response()->json(['url' => route('getFiles', $validated['folder_id'])], 200);
-        } catch (\Throwable $th) {
-            return response()->json(['error' => $th->getMessage()], 500);
-        }
+        return $this->documentFileController->updateOrder($request);
     }
 
 
     public function getFiles($folder)
     {
-        $tags   = request()->tags ?? [];
-        $result = $this->documentService->getFolderFiles($folder, $tags);
-
-        // Return JSON data for React/Inertia frontend
-        return response()->json([
-            'documents'  => $result['documents'],
-            'folderInfo' => $result['folderInfo'],
-            'folders'    => $result['folderData'],
-            'folder_id'  => $folder,
-        ]);
+        return $this->documentFileController->index(request(), (int)$folder);
     }
 
 
     function filterDocumentByTag(Request $request)
     {
-        $documents = $this->documentService->setFilterDocumentByTag($request->folder,  $request->tags ?? []);
-
-        // Return JSON data for React frontend
-        return response()->json(['documents' => $documents]);
+        return $this->documentFileController->filterByTag($request);
     }
 
 
     public function updateVisibility(Request $request)
     {
-        $validated = $request->validate([
-            'document_id' => ['required', 'integer', 'exists:documents,id'],
-            'visibility' => ['required', 'in:public,private'],
-        ]);
-
-        $document = Document::findOrFail($validated['document_id']);
-        $this->authorize('update', $document);
-
-        $document->update([
-            'visibility' => $validated['visibility'] === 'private' ? 'public' : 'private',
-        ]);
-
-        return response()->json([
-            'message' => 'Visibility updated successfully',
-            'visibility' => $document->visibility,
-            'url' => route('getFiles', $document->folder_id)
-        ]);
+        return $this->documentFileController->updateVisibility($request);
     }
 
 
@@ -175,32 +109,7 @@ class DocumentController extends Controller
 
     public function uploadDocumentFiles(StoreDocumentRequest $request)
     {
-        Log::info('Upload request received:', [
-            'has_files' => $request->hasFile('files'),
-            'has_files_array' => $request->hasFile('files[]'),
-            'files' => $request->file('files'),
-            'files_array' => $request->file('files[]'),
-            'all' => $request->all(),
-        ]);
-        
-        try {
-            // Handle both single file and array formats
-            if (!$request->hasFile('files') && $request->hasFile('files[]')) {
-                $request->merge(['files' => $request->file('files[]')]);
-            }
-            
-            $folderId = $this->documentService->setUploadDocumentFiles($request);
-
-            AccessLog::log('upload', 'document', $folderId, $request);
-
-            return response()->json(['message' => 'Files uploaded successfully', 'url' => route('getFiles', $folderId)], 200);
-        } catch (\InvalidArgumentException $e) {
-            Log::error('Validation error: ' . $e->getMessage());
-            return response()->json(['error' => $e->getMessage()], 422);
-        } catch (\Exception $e) {
-            Log::error('Upload error: ' . $e->getMessage(), ['exception' => $e]);
-            return response()->json(['error' => 'File upload failed: ' . $e->getMessage()], 500);
-        }
+        return $this->documentFileController->upload($request);
     }
 
     public function show(Document $document)
@@ -221,42 +130,7 @@ class DocumentController extends Controller
      */
     public function download(Document $document)
     {
-        $user = Auth::user();
-
-        // Check if user has permission to view/download the document
-        if (!$user->can('view', $document)) {
-            abort(403, 'You do not have permission to download this document.');
-        }
-
-        // For link-type documents, redirect to the external URL.
-        if (!empty($document->url)) {
-            return redirect($document->url);
-        }
-
-        $absolutePath = public_path($document->file_path);
-
-        if (!file_exists($absolutePath)) {
-            abort(404, 'The requested file could not be found on the server.');
-        }
-
-        try {
-            $content = $this->documentService->decryptDocumentContent($document);
-        } catch (\Exception $e) {
-            abort(500, 'Failed to retrieve document: ' . $e->getMessage());
-        }
-
-        AccessLog::log('download', 'document', $document->id, request());
-
-        $filename = $document->original_name ?? $document->name;
-        $mimeType = mime_content_type($absolutePath) ?: 'application/octet-stream';
-
-        return response($content, 200, [
-            'Content-Type'              => $mimeType,
-            'Content-Disposition'       => 'attachment; filename="' . addslashes($filename) . '"',
-            'Content-Length'            => strlen($content),
-            'Cache-Control'             => 'no-store, no-cache, must-revalidate',
-            'X-Encryption-Status'       => $document->is_encrypted ? 'AES-256-GCM' : 'plaintext',
-        ]);
+        return $this->documentFileController->download($document);
     }
 
     /**
@@ -265,71 +139,7 @@ class DocumentController extends Controller
      */
     public function view(Document $document)
     {
-        $user = Auth::user();
-
-        // Check if user has permission to view the document
-        if (!$user->can('view', $document)) {
-            abort(403, 'You do not have permission to view this document.');
-        }
-
-        if (!empty($document->url)) {
-            return redirect($document->url);
-        }
-
-        $absolutePath = public_path($document->file_path);
-
-        if (!file_exists($absolutePath)) {
-            abort(404, 'The requested file could not be found on the server.');
-        }
-
-        try {
-            $content = $this->documentService->decryptDocumentContent($document);
-        } catch (\Exception $e) {
-            abort(500, 'Failed to retrieve document: ' . $e->getMessage());
-        }
-
-        // Derive MIME type from extension so it is correct even when the file
-        // on disk is encrypted (raw ciphertext bytes would fool mime_content_type).
-        $extensionMimeMap = [
-            'pdf'  => 'application/pdf',
-            'png'  => 'image/png',
-            'jpg'  => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'gif'  => 'image/gif',
-            'svg'  => 'image/svg+xml',
-            'webp' => 'image/webp',
-            'bmp'  => 'image/bmp',
-            'mp4'  => 'video/mp4',
-            'webm' => 'video/webm',
-            'mov'  => 'video/quicktime',
-            'avi'  => 'video/x-msvideo',
-            'ogg'  => 'video/ogg',
-            'mp3'  => 'audio/mpeg',
-            'wav'  => 'audio/wav',
-            'm4a'  => 'audio/mp4',
-            'txt'  => 'text/plain',
-            'doc'  => 'application/msword',
-            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'xls'  => 'application/vnd.ms-excel',
-            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'ppt'  => 'application/vnd.ms-powerpoint',
-            'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        ];
-
-        $ext      = strtolower($document->extension ?? pathinfo($document->file_path, PATHINFO_EXTENSION));
-        $mimeType = $extensionMimeMap[$ext]
-            ?? ($document->is_encrypted ? 'application/octet-stream' : (mime_content_type($absolutePath) ?: 'application/octet-stream'));
-
-        $filename = $document->original_name ?? $document->name;
-
-        AccessLog::log('view', 'document', $document->id, request());
-
-        return response($content, 200, [
-            'Content-Type'        => $mimeType,
-            'Content-Disposition' => 'inline; filename="' . addslashes($filename) . '"',
-            'Content-Length'      => strlen($content),
-            'Cache-Control'       => 'no-store, no-cache, must-revalidate',
-        ]);
+        return $this->documentFileController->view($document);
     }
 
     public function update(UpdateDocumentRequest $request, Document $document)

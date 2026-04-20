@@ -1,17 +1,11 @@
-    import { useState } from 'react';
+import type { DocumentEntity } from '@/types/entities';
 import Modal from '@/Components/Modal';
 import SecondaryButton from '@/Components/SecondaryButton';
 
 interface DocumentPreviewProps {
     show: boolean;
     onClose: () => void;
-    document: {
-        id: number;
-        name: string;
-        file_path: string;
-        extension: string;
-        size: number;
-    } | null;
+    document: Pick<DocumentEntity, 'id' | 'name' | 'file_path' | 'extension' | 'size'> | null;
 }
 
 export default function DocumentPreview({ show, onClose, document }: DocumentPreviewProps) {

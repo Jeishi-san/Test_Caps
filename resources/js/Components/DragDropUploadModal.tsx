@@ -3,21 +3,10 @@ import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import SelectedFilesList from '@/Components/upload/SelectedFilesList';
+import UploadProgress from '@/Components/upload/UploadProgress';
+import type { UploadModalBaseProps } from '@/types/components';
 import { DIRECT_UPLOAD_MAX_FILE_BYTES, uploadFileDirect } from '@/utils/directUpload';
-
-interface Folder {
-    id: number;
-    name: string;
-    parent_id: number | null;
-}
-
-interface DragDropUploadModalProps {
-    show: boolean;
-    onClose: () => void;
-    folders: Folder[];
-    currentFolderId?: number;
-    onSuccess?: () => void;
-}
 
 const MAX_FILE_SIZE_BYTES = DIRECT_UPLOAD_MAX_FILE_BYTES;
 
@@ -30,7 +19,7 @@ export default function DragDropUploadModal({
     folders = [], 
     currentFolderId, 
     onSuccess 
-}: DragDropUploadModalProps) {
+}: UploadModalBaseProps) {
     const [files, setFiles] = useState<FileList | null>(null);
     const [folderId, setFolderId] = useState(currentFolderId || '');
     const [visibility, setVisibility] = useState<'public' | 'private'>('public');
@@ -232,37 +221,13 @@ export default function DragDropUploadModal({
                     </p>
                 </div>
 
-                {files && files.length > 0 && (
-                    <div className="mt-4 p-4 bg-white border border-gray-200 rounded-lg">
-                        <p className="text-sm font-medium text-gray-700 mb-3">
-                            Selected {files.length} file{files.length !== 1 ? 's' : ''}:
-                        </p>
-                        <ul className="text-xs text-gray-600 space-y-2 max-h-40 overflow-y-auto">
-                            {Array.from(files).map((file, index) => (
-                                <li key={index} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded">
-                                    <span className="truncate flex-1">{file.name}</span>
-                                    <span className="ml-2 text-gray-500">
-                                        {(file.size / 1024).toFixed(1)} KB
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
+                {files && files.length > 0 && <SelectedFilesList files={files} detailed={true} />}
 
                 {uploading && (
-                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
-                        <p className="text-sm text-blue-700">
-                            Uploading {activeFileLabel !== '' ? activeFileLabel : 'file'}...
-                        </p>
-                        <div className="mt-2 h-2 w-full bg-blue-100 rounded overflow-hidden">
-                            <div
-                                className="h-2 bg-blue-500 transition-all"
-                                style={{ width: `${progressPercent}%` }}
-                            />
-                        </div>
-                        <p className="mt-1 text-xs text-blue-700">{progressPercent}%</p>
-                    </div>
+                    <UploadProgress
+                        progressPercent={progressPercent}
+                        activeFileLabel={activeFileLabel}
+                    />
                 )}
 
                 <div className="mt-6">

@@ -15,10 +15,10 @@ use App\Http\Controllers\TagController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\FolderController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\DocumentFileController;
 use App\Http\Controllers\FileRequestController;
 use App\Http\Controllers\ShareDocumentController;
 use App\Http\Controllers\SearchController;
-use App\Http\Controllers\DownloadController;
 use App\Http\Controllers\StarredController;
 use App\Http\Controllers\SettingsController;
 use Inertia\Inertia;
@@ -88,24 +88,35 @@ Route::middleware('auth')->group(function () {
     
     // Document Routes
     Route::get('/documents/{document}', [DocumentController::class, 'show'])->name('documents.show');
-    Route::get('/documents/{document}/download', [DownloadController::class, 'document'])->middleware(['auth'])->name('documents.download');
-    Route::get('/documents/{document}/view', [DocumentController::class, 'view'])->name('documents.view');
+    Route::get('/documents/{document}/download', [DocumentFileController::class, 'download'])->middleware(['auth'])->name('documents.download');
+    Route::get('/documents/{document}/view', [DocumentFileController::class, 'view'])->name('documents.view');
     Route::put('/documents/{document}', [DocumentController::class, 'update'])->name('documents.update');
     Route::delete('/documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');
     Route::post('/documents/{document}/watch', [DocumentController::class, 'watch'])->name('documents.watch');
     Route::delete('/documents/{document}/unwatch', [DocumentController::class, 'unwatch'])->name('documents.unwatch');
     Route::get('/documents/{document}/is-watched', [DocumentController::class, 'isWatched'])->name('documents.isWatched');
-    Route::post('/update-visibility', [DocumentController::class, 'updateVisibility'])->name('update.visibility');
+    Route::post('/update-visibility', [DocumentFileController::class, 'updateVisibility'])->name('update.visibility');
 
-    Route::get('/getFiles/{folder}', [DocumentController::class, 'getFiles'])->name('getFiles');
+    Route::get('/getFiles/{folder}', [DocumentFileController::class, 'index'])->name('getFiles');
     Route::post('/send-email-document', [DocumentController::class, 'sendDocumentEmail'])->name('send.email');
     Route::get('/getDocumentComments', [DocumentController::class, 'getDocumentComments'])->name('getDocumentComments');
 
-    Route::post('/upload', [DocumentController::class, 'uploadDocumentFiles'])->name('upload');
+    Route::post('/upload', [DocumentFileController::class, 'upload'])->name('upload');
     Route::get('/upload', fn () => redirect()->route('documents.index'))->name('upload.fallback');
     Route::post('/change-document', [DocumentController::class, 'changeFile'])->name('changeFile');
-    Route::get('/filter-documents-by-tags', [DocumentController::class, 'filterDocumentByTag'])->name('filterDocumentByTag');
-    Route::post('/update-document-order', [DocumentController::class, 'updateDocumentOrder'])->name('update.document.order');
+    Route::get('/filter-documents-by-tags', [DocumentFileController::class, 'filterByTag'])->name('filterDocumentByTag');
+    Route::post('/update-document-order', [DocumentFileController::class, 'updateOrder'])->name('update.document.order');
+
+    // Phase 2 canonical file-operation routes.
+    Route::prefix('files')->name('files.')->group(function () {
+        Route::get('/folders/{folder}', [DocumentFileController::class, 'index'])->name('index');
+        Route::post('/upload', [DocumentFileController::class, 'upload'])->name('upload');
+        Route::get('/documents/{document}/download', [DocumentFileController::class, 'download'])->name('download');
+        Route::get('/documents/{document}/view', [DocumentFileController::class, 'view'])->name('view');
+        Route::get('/filter-by-tags', [DocumentFileController::class, 'filterByTag'])->name('filterByTag');
+        Route::post('/visibility', [DocumentFileController::class, 'updateVisibility'])->name('updateVisibility');
+        Route::post('/order', [DocumentFileController::class, 'updateOrder'])->name('updateOrder');
+    });
 
     Route::get('/api/users', [UserController::class, 'search'])->name('users.search');
 

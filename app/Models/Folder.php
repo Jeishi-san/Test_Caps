@@ -154,4 +154,135 @@ class Folder extends Model
         // After deleting all contents, remove the directory itself
         rmdir($dirPath);
     }
+
+    // -------------------------------------------------------------------------
+    // Query Scopes - Fix N+1 Query Problems
+    // -------------------------------------------------------------------------
+
+    /**
+     * Scope to get all folders accessible by a user.
+     * Includes public folders, folders with user's documents, and shared folders.
+     * 
+     * Usage: Folder::accessibleBy($user)->get()
+     */
+    public function scopeAccessibleBy($query, User $user)
+    {
+        return $query->where(function ($q) use ($user) {
+            // Public folders
+            $q->where('visibility', 'public')
+              // Folders containing user's documents
+              ->orWhereHas('documents', function ($docQ) use ($user) {
+                  $docQ->where('owner_id', $user->id);
+              })
+              // Shared folders
+              ->orWhereIn('id', function ($shareQ) use ($user) {
+                  $shareQ->select('share_id')
+                         ->from('share_documents')
+                         ->where('user_id', \Illuminate\Support\Facades\Auth::id())
+                         ->where('slug', 'folder');
+              });
+            
+            // Admin can see all folders
+            if ($user->isAdmin()) {
+                // Already covered by whereIn but keep explicit for clarity
+            }
+        });
+    }
+
+    /**
+     * Scope to get only public folders.
+     * 
+     * Usage: Folder::public()->get()
+     */
+    public function scopePublic($query)
+    {
+        return $query->where('visibility', 'public');
+    }
+
+    /**
+     * Scope to get only private folders.
+     * 
+     * Usage: Folder::private()->get()
+     */
+    public function scopePrivate($query)
+    {
+        return $query->where('visibility', 'private');
+    }
+
+    /**
+     * Scope to get folders shared with a user.
+     * 
+     * Usage: Folder::sharedWith($user)->get()
+     */
+    public function scopeSharedWith($query, User $user)
+    {
+        return $query->whereIn('id', function ($subq) {
+            $subq->select('share_id')
+                 ->from('share_documents')
+                 ->where('user_id', $user->id)
+                 ->where('slug', 'folder');
+        });
+    }
+
+    /**
+     * Scope to get folders containing documents owned by a user.
+     * 
+     * Usage: Folder::withUserDocuments($user)->get()
+     */
+    public function scopeWithUserDocuments($query, User $user)
+    {
+        return $query->whereHas('documents', function ($q) use ($user) {
+            $q->where('owner_id', $user->id);
+        });
+    }
+
+    /**
+     * Scope to get starred folders.
+     * 
+     * Usage: Folder::starred()->get()
+     */
+    public function scopeStarred($query)
+    {
+        return $query->where('is_starred', true);
+    }
+
+    /**
+     * Scope to get root-level folders (no parent).
+     * 
+     * Usage: Folder::root()->get()
+     */
+    public function scopeRoot($query)
+    {
+        return $query->whereNull('parent_id');
+    }
+
+    /**
+     * Scope to get subfolders of a parent.
+     * 
+     * Usage: Folder::childrenOf($parentId)->get()
+     */
+    public function scopeChildrenOf($query, int $parentId)
+    {
+        return $query->where('parent_id', $parentId);
+    }
+
+    /**
+     * Scope to get folders ordered by position then name.
+     * 
+     * Usage: Folder::ordered()->get()
+     */
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('position')->orderBy('name');
+    }
+
+    /**
+     * Scope to get folders with document count.
+     * 
+     * Usage: Folder::withCount('documents')->get()
+     */
+    public function scopeWithDocumentCount($query)
+    {
+        return $query->withCount('documents');
+    }
 }

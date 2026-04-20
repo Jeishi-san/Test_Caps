@@ -2,6 +2,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { PageProps } from '@/types';
 import { useState } from 'react';
+import type { FolderEntity } from '@/types/entities';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -10,22 +11,8 @@ import TextInput from '@/Components/TextInput';
 import InputLabel from '@/Components/InputLabel';
 import ShareModal from '@/Components/ShareModal';
 
-interface Category {
-    id: number;
-    name: string;
-}
-
-interface Folder {
-    id: number;
-    name: string;
-    parent_id: number | null;
-    position?: number;
-    categories?: Category[];
-    subfolders?: Folder[];
-}
-
 interface FoldersIndexProps extends PageProps {
-    folders: Folder[];
+    folders: FolderEntity[];
 }
 
 function FolderRow({
@@ -35,11 +22,11 @@ function FolderRow({
     onRename,
     onShare,
 }: {
-    folder: Folder;
+    folder: FolderEntity;
     depth?: number;
     onDelete: (id: number, name: string) => void;
-    onRename: (folder: Folder) => void;
-    onShare: (folder: Folder) => void;
+    onRename: (folder: FolderEntity) => void;
+    onShare: (folder: FolderEntity) => void;
 }) {
     const [open, setOpen] = useState(depth === 0);
     const hasSubs = folder.subfolders && folder.subfolders.length > 0;
@@ -123,13 +110,13 @@ export default function Index({ auth, folders }: FoldersIndexProps) {
     const [showCreate, setShowCreate] = useState(false);
     const [showRename, setShowRename] = useState(false);
     const [showShare, setShowShare] = useState(false);
-    const [renameTarget, setRenameTarget] = useState<Folder | null>(null);
-    const [shareTarget, setShareTarget] = useState<Folder | null>(null);
+    const [renameTarget, setRenameTarget] = useState<FolderEntity | null>(null);
+    const [shareTarget, setShareTarget] = useState<FolderEntity | null>(null);
     const [form, setForm] = useState({ name: '', parent_id: '' });
     const [renameValue, setRenameValue] = useState('');
     const [processing, setProcessing] = useState(false);
 
-    const handleShareOpen = (folder: Folder) => {
+    const handleShareOpen = (folder: FolderEntity) => {
         setShareTarget(folder);
         setShowShare(true);
     };
@@ -147,7 +134,7 @@ export default function Index({ auth, folders }: FoldersIndexProps) {
         );
     };
 
-    const handleRenameOpen = (folder: Folder) => {
+    const handleRenameOpen = (folder: FolderEntity) => {
         setRenameTarget(folder);
         setRenameValue(folder.name);
         setShowRename(true);
@@ -173,8 +160,8 @@ export default function Index({ auth, folders }: FoldersIndexProps) {
     };
 
     // Flatten for parent selector
-    const allFolders: Folder[] = [];
-    const flatten = (items: Folder[]) => {
+    const allFolders: FolderEntity[] = [];
+    const flatten = (items: FolderEntity[]) => {
         items.forEach((f) => { allFolders.push(f); if (f.subfolders) flatten(f.subfolders); });
     };
     flatten(folders);

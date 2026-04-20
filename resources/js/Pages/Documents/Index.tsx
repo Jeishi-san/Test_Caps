@@ -2,47 +2,18 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { PageProps } from '@/types';
 import { useState, useEffect } from 'react';
+import type { DocumentEntity, FolderEntity, OwnerSummary } from '@/types/entities';
 import DragDropUploadModal from '@/Components/DragDropUploadModal';
 import DocumentPreview from '@/Components/DocumentPreview';
 import PrimaryButton from '@/Components/PrimaryButton';
 import ShareModal from '@/Components/ShareModal';
 import axios from 'axios';
 
-interface Document {
-    id: number;
-    name: string;
-    file_path: string;
-    extension: string;
-    size: number;
-    visibility: string;
-    folder_id: number | null;
-    created_at: string;
-    updated_at: string;
-    is_stegoed?: boolean;
-    tags?: Array<{
-        id: number;
-        name: string;
-    }>;
-}
-
-interface Folder {
-    id: number;
-    name: string;
-    parent_id: number | null;
-    children?: Folder[];
-}
-
-interface Owner {
-    id: number;
-    name: string;
-    email: string;
-}
-
 interface DocumentsPageProps extends PageProps {
-    documents: Document[];
-    folders: Folder[];
-    owners: Owner[];
-    rightFolders: Folder[];
+    documents: DocumentEntity[];
+    folders: FolderEntity[];
+    owners: OwnerSummary[];
+    rightFolders: FolderEntity[];
 }
 
 export default function Index({
@@ -53,7 +24,7 @@ export default function Index({
     rightFolders,
 }: DocumentsPageProps) {
     const [showUploadModal, setShowUploadModal] = useState(false);
-    const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+    const [selectedDocument, setSelectedDocument] = useState<DocumentEntity | null>(null);
     const [showPreview, setShowPreview] = useState(false);
     const [editingDocument, setEditingDocument] = useState<number | null>(null);
     const [editName, setEditName] = useState('');
@@ -65,12 +36,12 @@ export default function Index({
         router.reload();
     };
 
-    const handlePreview = (document: Document) => {
+    const handlePreview = (document: DocumentEntity) => {
         setSelectedDocument(document);
         setShowPreview(true);
     };
 
-    const handleEdit = (document: Document) => {
+    const handleEdit = (document: DocumentEntity) => {
         setEditingDocument(document.id);
         setEditName(document.name);
     };
@@ -98,7 +69,7 @@ export default function Index({
         }
     };
 
-    const handleDownload = (document: Document) => {
+    const handleDownload = (document: DocumentEntity) => {
         const fileUrl = document.file_path.startsWith('http') 
             ? document.file_path 
             : `/${document.file_path}`;
@@ -109,7 +80,7 @@ export default function Index({
         link.click();
     };
 
-    const handleShare = (document: Document) => {
+    const handleShare = (document: DocumentEntity) => {
         setDocumentToShare({
             id: document.id,
             name: document.name,

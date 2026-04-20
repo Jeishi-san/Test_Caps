@@ -163,6 +163,10 @@ Set `APP_ENV=production` and `APP_DEBUG=false` in `.env` before deploying.
 php artisan test
 ```
 
+## API Docs
+
+- Phase 2 file operations and migration notes: [docs/phase2-api-endpoints.md](docs/phase2-api-endpoints.md)
+
 ---
 
 ## Project Structure

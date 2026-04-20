@@ -14,34 +14,18 @@ class StarredController extends Controller
     {
         $user = Auth::user();
 
-        // Get starred documents
+        // Get starred documents accessible by user
         $starredDocuments = Document::with('tags')
-            ->where('owner_id', $user->id)
             ->where('is_starred', true)
+            ->accessibleBy($user)
             ->orderBy('updated_at', 'desc')
             ->get();
 
-        // Get starred folders
+        // Get starred folders accessible by user
         $starredFolders = Folder::with(['categories', 'subfolders'])
             ->whereNull('parent_id')
             ->where('is_starred', true)
-            ->where(function ($query) use ($user) {
-                // Check if user is admin - can view all starred folders
-                if ($user->isAdmin()) {
-                    return;
-                }
-
-                // Check if folder is public or user has access to it
-                $query->where(function ($q) use ($user) {
-                    $q->where('visibility', 'public')
-                        ->orWhere(function ($subq) use ($user) {
-                            // Check if user has documents in this folder
-                            $subq->whereHas('documents', function ($docQuery) use ($user) {
-                                $docQuery->where('owner_id', $user->id);
-                            });
-                        });
-                });
-            })
+            ->accessibleBy($user)
             ->orderBy('updated_at', 'desc')
             ->get();
 
