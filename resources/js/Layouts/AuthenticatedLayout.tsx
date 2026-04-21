@@ -84,6 +84,12 @@ export default function Authenticated({
                                         >
                                             User Roles
                                         </NavLink>
+                                        <NavLink
+                                            href={route('admin.dashboard', undefined, false)}
+                                            active={route().current('admin.*')}
+                                        >
+                                            Admin Console
+                                        </NavLink>
                                     </>
                                 )}
 
@@ -99,6 +105,12 @@ export default function Authenticated({
                                     active={route().current('stego.*')}
                                 >
                                     My Docs
+                                </NavLink>
+                                <NavLink
+                                    href={route('my-documents', undefined, false)}
+                                    active={route().current('my-documents')}
+                                >
+                                    My Documents Hub
                                 </NavLink>
                                 <NavLink
                                     href={route('stego.encode.form', undefined, false)}
@@ -250,6 +262,9 @@ export default function Authenticated({
                                 <ResponsiveNavLink href={route('users.roles', undefined, false)} active={route().current('users.roles')}>
                                     User Roles
                                 </ResponsiveNavLink>
+                                <ResponsiveNavLink href={route('admin.dashboard', undefined, false)} active={route().current('admin.*')}>
+                                    Admin Console
+                                </ResponsiveNavLink>
                             </>
                         )}
 
@@ -258,6 +273,9 @@ export default function Authenticated({
                         </div>
                         <ResponsiveNavLink href={route('stego.index', undefined, false)} active={route().current('stego.*')}>
                             My Docs
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink href={route('my-documents', undefined, false)} active={route().current('my-documents')}>
+                            My Documents Hub
                         </ResponsiveNavLink>
                         <ResponsiveNavLink href={route('stego.encode.form', undefined, false)} active={route().current('stego.encode.form')}>
                             Encode

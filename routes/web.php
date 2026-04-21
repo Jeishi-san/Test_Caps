@@ -68,6 +68,10 @@ Route::get('/dashboard', function () {
     ]);
 })->middleware(['auth'])->name('dashboard');
 
+Route::get('/admin/login', function () {
+    return Inertia::render('Admin/Login');
+})->name('admin.login');
+
 // Profile routes
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -75,6 +79,81 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar'])->name('profile.avatar.upload');
     Route::delete('/profile/avatar', [ProfileController::class, 'deleteAvatar'])->name('profile.avatar.delete');
+});
+
+Route::middleware('auth')->group(function () {
+    $adminGate = function () {
+        $user = Auth::user();
+        abort_unless($user && in_array($user->role, ['admin', 'owner'], true), 403);
+    };
+
+    Route::get('/admin', function () use ($adminGate) {
+        $adminGate();
+        return Inertia::render('Admin/Dashboard');
+    })->name('admin.dashboard');
+
+    Route::get('/admin/dashboard', function () use ($adminGate) {
+        $adminGate();
+        return redirect()->route('admin.dashboard');
+    })->name('admin.dashboard.alias');
+
+    $adminSection = function (string $title, string $description) use ($adminGate) {
+        $adminGate();
+
+        return Inertia::render('Admin/Section', [
+            'title' => $title,
+            'description' => $description,
+        ]);
+    };
+
+    Route::get('/admin/users', fn () => $adminSection('Users', 'Review and manage user accounts across the system.'))->name('admin.users');
+    Route::get('/admin/fragments', fn () => $adminSection('Fragment Monitoring', 'Inspect fragment storage, integrity, and rebuild activity.'))->name('admin.fragments');
+    Route::get('/admin/activity', fn () => $adminSection('Activity Logs', 'Audit notable administrative and system events.'))->name('admin.activity');
+    Route::get('/admin/incidents', fn () => $adminSection('Incidents', 'Track degraded services, security incidents, and recovery progress.'))->name('admin.incidents');
+    Route::get('/admin/admin-management', fn () => $adminSection('Admin Management', 'Promote, revoke, and review privileged operators.'))->name('admin.management');
+    Route::get('/admin/encryption-policy', fn () => $adminSection('Encryption Policy', 'Tune encryption defaults and key-handling rules.'))->name('admin.encryption-policy');
+    Route::get('/admin/key-management', fn () => $adminSection('Key Management Policy', 'Rotate and review the key lifecycle controls.'))->name('admin.key-management');
+    Route::get('/admin/storage', fn () => $adminSection('Storage Configuration', 'Review storage usage limits and backend policy.'))->name('admin.storage');
+    Route::get('/admin/system', fn () => $adminSection('System Configuration', 'Adjust operational settings for the platform.'))->name('admin.system');
+    Route::get('/admin/disaster-recovery', fn () => $adminSection('Disaster Recovery', 'Define backup, recovery, and failover procedures.'))->name('admin.disaster-recovery');
+
+    Route::get('/my-documents', function () {
+        $user = Auth::user();
+
+        $folders = Folder::query()
+            ->latest()
+            ->take(6)
+            ->get()
+            ->map(fn (Folder $folder) => [
+                'id' => $folder->id,
+                'name' => $folder->name,
+                'documentCount' => $folder->documents()->count(),
+                'description' => $folder->description ?? 'Secure document collection',
+            ])
+            ->values();
+
+        $documents = Document::query()
+            ->latest()
+            ->take(8)
+            ->get()
+            ->map(fn (Document $document) => [
+                'id' => $document->id,
+                'name' => $document->name,
+                'extension' => $document->extension ?? pathinfo($document->name, PATHINFO_EXTENSION),
+                'size' => (int) ($document->size ?? 0),
+                'created_at' => $document->created_at?->toISOString() ?? now()->toISOString(),
+                'file_path' => $document->file_path,
+                'owner' => $user?->email,
+            ])
+            ->values();
+
+        return Inertia::render('MyDocuments', [
+            'folders' => $folders,
+            'documents' => $documents,
+            'totalStorage' => (int) Document::sum('size'),
+            'storageLimit' => 1024 * 1024 * 1024 * 5,
+        ]);
+    })->middleware(['auth'])->name('my-documents');
 });
 
 // Application routes

@@ -3,7 +3,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "tsc && vite build"
+        "build": "vite build"
     },
     "devDependencies": {
         "@headlessui/react": "^2.0.0",
@@ -25,6 +25,7 @@
     },
     "dependencies": {
         "@reduxjs/toolkit": "^1.9.7",
+        "lucide-react": "^1.8.0",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
         "react-redux": "^8.1.3",

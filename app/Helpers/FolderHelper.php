@@ -8,32 +8,25 @@ use Illuminate\Support\Str;
 class FolderHelper
 {
 
-    public static function getAllFoldersWithSubfolders($parentFolder = null)
+    private static function traverseFolders(callable $formatter, $parentFolderId = null, $depth = 0)
     {
-        $folders = Folder::where('parent_id', $parentFolder)->get();
+        $folders = Folder::where('parent_id', $parentFolderId)->get();
+        $output = '';
 
         foreach ($folders as $folder) {
-            $folder->load('subfolders');
-            self::getAllFoldersWithSubfolders($folder->id);
+            $output .= $formatter($folder, $depth);
+            $output .= self::traverseFolders($formatter, $folder->id, $depth + 1);
         }
 
-        return $folders;
+        return $output;
     }
 
     public static  function generateDropdownOptions($parentFolderId = null, $depth = 0)
     {
-        $folders = Folder::where('parent_id', $parentFolderId)->get();
-        $options = '';
-
-        foreach ($folders as $folder) {
-            $indentation = str_repeat('--', $depth); // Add indentation for visual hierarchy
-            $options .= '<option value="' . $folder->id . '">' . $indentation . $folder->name . '</option>';
-
-            // Recursively generate options for subfolders
-            $options .= self::generateDropdownOptions($folder->id, $depth + 1);
-        }
-
-        return $options;
+        return self::traverseFolders(function($folder, $depth) {
+            $indentation = str_repeat('--', $depth);
+            return '<option value="' . $folder->id . '">' . $indentation . $folder->name . '</option>';
+        }, $parentFolderId, $depth);
     }
 
 
