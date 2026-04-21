@@ -1,7 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import { PageProps } from '@/types';
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   estimateCarriersNeeded, 
   MIN_IMAGE_DIMENSION, 
@@ -11,7 +11,7 @@ import {
 } from '@/utils/carrierCalculations';
 import { useCarrierPool } from '@/hooks/useCarrierPool';
 import { usePreflightVerification } from '@/hooks/usePreflightVerification';
-import { CarrierInfo } from '@/hooks/useCarrierManagement';
+import { useStegoEncode } from '@/hooks/useStegoEncode';
 
 interface Document {
     id: number;
@@ -46,15 +46,29 @@ interface EncodeProps extends PageProps {
 type Step = 1 | 2;
 
 export default function Encode({ auth, documents, systemCarriers = [], errors = {} }: EncodeProps) {
-    const [step, setStep] = useState<Step>(1);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [useSystemCarriers, setUseSystemCarriers] = useState(false);
-    const [selectedCarriers, setSelectedCarriers] = useState<CarrierInfo[]>([]);
-    const [isSelectingCarriers, setIsSelectingCarriers] = useState(false);
     const autoSelectContextRef = useRef<string | null>(null);
     const previousDocumentIdRef = useRef<string>('');
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const { flash } = usePage<{ flash: { success?: string; error?: string } }>().props;
+
+    const {
+        step,
+        setStep,
+        carriers,
+        dragOver,
+        setDragOver,
+        addCarrierFiles,
+        removeCarrier,
+        allCarriersLoaded,
+        selectedCarriers,
+        setSelectedCarriers,
+        isSelectingCarriers,
+        useSystemCarriers,
+        setUseSystemCarriers,
+        runCarrierSelection,
+    } = useStegoEncode({ initialStep: 1 });
 
     const { data, setData, post, processing, reset } = useForm<{
         document_id: string;
@@ -66,17 +80,10 @@ export default function Encode({ auth, documents, systemCarriers = [], errors = 
         use_system_carriers: false,
     });
 
-    // Manual carrier uploads are disabled on this page; web encode uses
-    // carrier pool auto-selection and optional system fallback only.
-    const carriers: CarrierInfo[] = [];
-    const allLoaded = true;
-    const dragOver = false;
-    const setDragOver = (_value: boolean) => {};
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const removeCarrier = (_index: number) => {};
-    const addFiles = (_files: FileList | null) => {};
-    const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
+        setDragOver(false);
+        addCarrierFiles(e.dataTransfer.files);
     };
     
     // Carrier pool hook
@@ -146,7 +153,7 @@ export default function Encode({ auth, documents, systemCarriers = [], errors = 
         selectedDoc,
         dataNeeded,
         effectiveCapacity,
-        allLoaded,
+        allLoaded: allCarriersLoaded,
         poolCarriers,
         calculateAverageCarrierCapacity
     });
@@ -169,28 +176,7 @@ export default function Encode({ auth, documents, systemCarriers = [], errors = 
             return;
         }
         
-        // Simulate carrier selection process (in reality, this happens on backend)
-        setIsSelectingCarriers(true);
-        setTimeout(() => {
-            // Simulate selection based on capacity (largest first)
-            const sortedCarriers = [...carriers]
-                .filter(c => c.capacity !== undefined && c.capacity > 0)
-                .sort((a, b) => (b.capacity ?? 0) - (a.capacity ?? 0));
-            
-            // Select carriers until we have enough capacity
-            const selected: CarrierInfo[] = [];
-            let accumulatedCapacity = 0;
-            const neededCapacity = dataNeeded;
-            
-            for (const carrier of sortedCarriers) {
-                if (accumulatedCapacity >= neededCapacity) break;
-                selected.push(carrier);
-                accumulatedCapacity += carrier.capacity ?? 0;
-            }
-            
-            setSelectedCarriers(selected);
-            setIsSelectingCarriers(false);
-        }, 500);
+        runCarrierSelection(dataNeeded, carriers);
         
         post(route('stego.encode'), {
             forceFormData: true,
@@ -212,7 +198,6 @@ export default function Encode({ auth, documents, systemCarriers = [], errors = 
                 if (firstErr) {
                     setErrorMsg(String(firstErr));
                 }
-                setIsSelectingCarriers(false);
             },
         });
     };
@@ -229,7 +214,7 @@ export default function Encode({ auth, documents, systemCarriers = [], errors = 
     const poolFirstMode = !!selectedDoc && !hasManualCarriers && poolCanCoverDocument;
     const hideManualUploader = true;
     const effectiveCapacity = useSystemCarriers ? totalCapacity + systemCapacity + autoSelectedCapacity : totalCapacity + autoSelectedCapacity;
-    const capacityOk    = (hasManualCarriers ? allLoaded : true) && effectiveCapacity >= dataNeeded;
+    const capacityOk    = (hasManualCarriers ? allCarriersLoaded : true) && effectiveCapacity >= dataNeeded;
 
     const canGoNext1 = !!data.document_id;
     const canSubmit  = canGoNext1 && (carriers.length > 0 || useSystemCarriers || autoSelectedCarriers.length > 0) && capacityOk;
@@ -586,7 +571,7 @@ export default function Encode({ auth, documents, systemCarriers = [], errors = 
                                                 accept=".png,.bmp,.jpg,.jpeg"
                                                 multiple
                                                 className="hidden"
-                                                onChange={(e) => addFiles(e.target.files)}
+                                                onChange={(e) => addCarrierFiles(e.target.files)}
                                             />
                                         </div>
                                     )}

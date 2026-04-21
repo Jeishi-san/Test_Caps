@@ -1,55 +1,23 @@
-import { useEffect, useState } from 'react';
-import axios from 'axios';
 import SpaLayout from '../components/SpaLayout';
-
-interface TokenInfo {
-    id: number;
-    name: string;
-    last_used_at: string | null;
-    expires_at: string | null;
-    created_at: string;
-}
+import { useApiTokens } from '@/hooks/useApiTokens';
 
 export default function Tokens() {
-    const [tokens, setTokens] = useState<TokenInfo[]>([]);
-    const [creating, setCreating] = useState(false);
-    const [name, setName] = useState('');
-    const [newToken, setNewToken] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [copied, setCopied] = useState(false);
-    const [error, setError] = useState('');
-
-    useEffect(() => {
-        axios.get('/api/auth/tokens').then((r) => setTokens(r.data)).catch(console.error);
-    }, []);
-
-    const createToken = async () => {
-        setError('');
-        if (!name.trim()) { setError('Token name is required.'); return; }
-        setLoading(true);
-        try {
-            const res = await axios.post('/api/auth/tokens', { name: name.trim() });
-            setNewToken(res.data.token);
-            if (res.data.token_info) setTokens((p) => [res.data.token_info, ...p]);
-            setName('');
-            setCreating(false);
-        } catch (e: any) {
-            setError(e.response?.data?.message ?? 'Failed to create token.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const revokeToken = async (id: number) => {
-        if (!confirm('Revoke this token?')) return;
-        await axios.delete(`/api/auth/tokens/${id}`);
-        setTokens((p) => p.filter((t) => t.id !== id));
-    };
-
-    const copy = () => {
-        if (!newToken) return;
-        navigator.clipboard.writeText(newToken).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
-    };
+    const {
+        tokens,
+        creating,
+        setCreating,
+        name,
+        setName,
+        newToken,
+        setNewToken,
+        loading,
+        copied,
+        error,
+        setError,
+        createToken,
+        revokeToken,
+        copyToken,
+    } = useApiTokens({ fetchOnMount: true, revokeConfirmText: 'Revoke this token?' });
 
     return (
         <SpaLayout>
@@ -64,7 +32,7 @@ export default function Tokens() {
                         <p className="mb-2 text-sm font-semibold text-green-800">✅ Token created — copy it now (shown once)</p>
                         <div className="flex items-center gap-2">
                             <code className="flex-1 break-all rounded bg-white border border-green-200 px-3 py-2 text-xs font-mono text-green-900">{newToken}</code>
-                            <button onClick={copy} className="shrink-0 rounded-md border border-green-300 bg-white px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100">{copied ? '✓ Copied' : 'Copy'}</button>
+                            <button onClick={copyToken} className="shrink-0 rounded-md border border-green-300 bg-white px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100">{copied ? '✓ Copied' : 'Copy'}</button>
                         </div>
                     </div>
                 )}

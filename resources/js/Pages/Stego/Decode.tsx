@@ -1,181 +1,33 @@
 ﻿import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 import { PageProps } from '@/types';
-import { FormEvent, useState, useEffect } from 'react';
-import axios from 'axios';
-
-interface StegoDoc {
-    id: number;
-    document: { id: number; name: string; extension: string } | null;
-    status?: 'pending' | 'ready' | 'failed';
-    segments_count: number;
-    created_at: string;
-    decoding_status?: string;
-    decoding_error?: string;
-    download_path?: string;
-}
+import { FormEvent } from 'react';
+import { StegoDecodeDoc, useStegoDecode } from '@/hooks/useStegoDecode';
 
 interface DecodeProps extends PageProps {
-    stegoDocs: StegoDoc[];
+    stegoDocs: StegoDecodeDoc[];
     errors?: Record<string, string>;
 }
 
 export default function Decode({ auth, stegoDocs, errors = {} }: DecodeProps) {
-    const [selected, setSelected] = useState('');
-    const [submitError, setSubmitError] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [decodingStatus, setDecodingStatus] = useState<string | null>(null);
-    const [isDownloading, setIsDownloading] = useState(false);
-
-    const [docs, setDocs] = useState<StegoDoc[]>(stegoDocs);
-
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (decodingStatus && ['pending', 'in_progress'].includes(decodingStatus)) {
-            interval = setInterval(() => {
-                checkDecodingStatus();
-            }, 2000);
-        }
-        return () => clearInterval(interval);
-    }, [decodingStatus]);
-
-    const checkDecodingStatus = async () => {
-        if (!selected) return;
-
-        try {
-            const response = await axios.get(`/api/stego/documents/${selected}/status`);
-            const statusData = response.data;
-
-            if (!statusData || typeof statusData !== 'object' || !statusData.status) {
-                throw new Error('Invalid status response from server.');
-            }
-
-            const nextStatus = statusData.status as string;
-            
-            setDocs(prevDocs => prevDocs.map(doc => 
-                doc.id === parseInt(selected) ? { 
-                    ...doc, 
-                    decoding_status: nextStatus,
-                    decoding_error: statusData.error,
-                    download_path: statusData.download_path
-                } : doc
-            ));
-
-            setDecodingStatus(nextStatus);
-
-            if (nextStatus === 'completed') {
-                // Decoding is complete, show download button
-                setDecodingStatus('completed');
-            } else if (nextStatus === 'failed') {
-                // Decoding failed
-                setSubmitError(statusData.error || 'Decoding failed.');
-            }
-        } catch (error: unknown) {
-            console.error('Error checking decoding status:', error);
-            if (error instanceof Error) {
-                setSubmitError(error.message);
-            } else {
-                setSubmitError('Failed to check decoding status.');
-            }
-        }
-    };
+    const {
+        docs,
+        selected,
+        setSelected,
+        decodingStatus,
+        isSubmitting,
+        isDownloading,
+        submitError,
+        startDecode,
+        downloadDecoded,
+    } = useStegoDecode({
+        initialDocs: stegoDocs,
+        unauthorizedMessage: 'Session expired or CSRF token mismatch. Please refresh and log in again.',
+    });
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        if (!selected || isSubmitting) return;
-
-        setSubmitError('');
-        setIsSubmitting(true);
-
-        try {
-            const response = await axios.post('/api/stego/decode', {
-                stego_document_id: Number(selected),
-            });
-
-            if (!response || (response.status !== 200 && response.status !== 202)) {
-                throw new Error('Decode request was not accepted by the server.');
-            }
-            
-            // Set initial decoding status
-            setDecodingStatus('pending');
-            
-            // Update docs with initial status
-            setDocs(prevDocs => prevDocs.map(doc => 
-                doc.id === parseInt(selected) ? { ...doc, decoding_status: 'pending' } : doc
-            ));
-
-            setSubmitError('');
-        } catch (error: unknown) {
-            if (axios.isAxiosError(error) && error.response?.status === 419) {
-                setSubmitError('Session expired or CSRF token mismatch. Please refresh and log in again.');
-            } else if (axios.isAxiosError(error) && error.response?.data?.message) {
-                setSubmitError(error.response.data.message);
-            } else if (error instanceof Error) {
-                setSubmitError(error.message);
-            } else {
-                setSubmitError('Decode failed. Please try again.');
-            }
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleDownload = async () => {
-        if (!selected || isDownloading) return;
-
-        setIsDownloading(true);
-
-        try {
-            const response = await axios.get(`/api/stego/decode/${selected}`, {
-                responseType: 'blob',
-            });
-
-            const contentType = response.headers['content-type'] || '';
-            if (contentType.includes('application/json')) {
-                const text = await response.data.text();
-                const parsed = JSON.parse(text) as { message?: string };
-                throw new Error(parsed.message || 'Download failed.');
-            }
-
-            const filename = parseDownloadFilename(response.headers['content-disposition']);
-            const blobUrl = window.URL.createObjectURL(response.data);
-            const link = document.createElement('a');
-            link.href = blobUrl;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(blobUrl);
-        } catch (error: unknown) {
-            if (axios.isAxiosError(error) && error.response?.status === 419) {
-                setSubmitError('Session expired or CSRF token mismatch. Please refresh and log in again.');
-            } else if (axios.isAxiosError(error) && error.response?.data?.message) {
-                setSubmitError(error.response.data.message);
-            } else if (error instanceof Error) {
-                setSubmitError(error.message);
-            } else {
-                setSubmitError('Download failed. Please try again.');
-            }
-        } finally {
-            setIsDownloading(false);
-        }
-    };
-
-    const parseDownloadFilename = (contentDisposition?: string): string => {
-        if (!contentDisposition) return 'decoded_file';
-
-        const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-        if (utf8Match?.[1]) {
-            return decodeURIComponent(utf8Match[1]);
-        }
-
-        const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i);
-        if (quotedMatch?.[1]) {
-            return quotedMatch[1];
-        }
-
-        const plainMatch = contentDisposition.match(/filename=([^;]+)/i);
-        return plainMatch?.[1]?.trim() || 'decoded_file';
+        await startDecode();
     };
 
     return (
@@ -282,7 +134,7 @@ export default function Decode({ auth, stegoDocs, errors = {} }: DecodeProps) {
                                 {decodingStatus === 'completed' ? (
                                     <button
                                         type="button"
-                                        onClick={handleDownload}
+                                        onClick={downloadDecoded}
                                         disabled={!selected || isDownloading}
                                         className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
                                     >

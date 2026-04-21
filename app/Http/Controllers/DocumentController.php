@@ -222,6 +222,18 @@ class DocumentController extends Controller
         return response()->json(['is_watched' => $isWatched]);
     }
 
+    public function watchedIds(): JsonResponse
+    {
+        $user = Auth::user();
+
+        $watchedIds = DocumentWatcher::where('user_id', $user->id)
+            ->pluck('document_id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        return response()->json(['watched_document_ids' => $watchedIds]);
+    }
+
     public function destroy(Document $document)
     {
         // Check if user has permission to delete the document

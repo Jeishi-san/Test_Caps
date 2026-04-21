@@ -1,0 +1,546 @@
+File Tree: Test_Caps
+Generated on: 4/21/2026, 1:48:23 PM
+Root path: c:\Users\USER\Desktop\Test\Test_Caps
+
+────────────────────────────────────────────────────────────────────────────────
+
+├── 📁 .kilo/
+│   ├── ⚙️ .gitignore
+│   ├── ⚙️ agent-manager.json
+│   ├── 📄 bun.lock
+│   └── ⚙️ package.json
+├── 📁 Updates,/
+│   └── 📁  Changes/
+├── 📁 Updates, Changes/
+│   ├── 📝 CHANGES_2026-03-03.md
+│   ├── 📝 CHANGES_2026-03-04.md
+│   ├── 📝 CHANGES_2026-03-05.md
+│   ├── 📝 CHANGES_2026-03-06.md
+│   ├── 📝 CHANGES_2026-03-12.md
+│   ├── 📝 CHANGES_2026-03-16.md
+│   ├── 📝 CHANGES_2026-03-17.md
+│   ├── 📝 CHANGES_2026-03-19.md
+│   ├── 📝 CHANGES_2026-03-20.md
+│   ├── 📝 CHANGES_2026-03-21.md
+│   ├── 📝 CHANGES_2026-03-23_carrier_pool.md
+│   ├── 📝 CHANGES_2026-03-24_bin_packing_segmentation.md
+│   ├── 📝 CHANGES_2026-03-26_backblaze_b2_integration.md
+│   ├── 📝 CHANGES_2026-03-30_cloud_storage_roundtrip_validation.md
+│   ├── 📝 CHANGES_2026-04-06_cloud_persistence_alignment.md
+│   ├── 📝 CHANGES_2026-04-08_capacity_calculation_fix.md
+│   ├── 📝 CHANGES_2026-04-10.md
+│   ├── 📝 CHANGES_2026-04-13_share_workflow_refactor.md
+│   ├── 📝 CHANGES_2026-04-14_zindex_notification_download.md
+│   ├── 📝 CHANGES_2026-04-16_envelope_sharing.md
+│   ├── 📝 CHANGES_2026-04-17_automatic_grant_activation.md
+│   ├── 📝 CHANGES_2026-04-20.md
+│   ├── 📝 CHAPTER_III_REPLACEMENT_DRAFT_2026-04-17.md
+│   ├── 📝 CHAPTER_III_UPDATE_CHECKLIST_2026-04-17.md
+│   ├── 📝 FIX_3_IMPLEMENTATION_SUMMARY.md
+│   ├── 📝 PHASE_2_IMPLEMENTATION.md
+│   ├── 📝 PHASE_2_QUICK_REFERENCE.md
+│   ├── 📝 fix.md
+│   ├── 📝 notes_for_update.md
+│   ├── 📝 stegolock-backblaze-b2-guide.md
+│   └── 📝 stegolock-carrier-pool-guide.md
+├── 📁 app/
+│   ├── 📁 Console/
+│   │   └── 📁 Commands/
+│   │       ├── 🐘 TestStegoEncoding.php
+│   │       └── 🐘 TestUploadCommand.php
+│   ├── 📁 Helpers/
+│   │   ├── 🐘 FolderHelper.php
+│   │   ├── 🐘 MimeTypeHelper.php
+│   │   └── 🐘 helper.php
+│   ├── 📁 Http/
+│   │   ├── 📁 Concerns/
+│   │   │   └── 🐘 HasStegoEncoding.php
+│   │   ├── 📁 Controllers/
+│   │   │   ├── 📁 Api/
+│   │   │   │   ├── 🐘 AuthController.php
+│   │   │   │   ├── 🐘 B2UploadController.php
+│   │   │   │   ├── 🐘 CarrierPoolController.php
+│   │   │   │   ├── 🐘 DashboardController.php
+│   │   │   │   ├── 🐘 DocumentController.php
+│   │   │   │   ├── 🐘 RoleController.php
+│   │   │   │   ├── 🐘 StegoDocumentController.php
+│   │   │   │   └── 🐘 UserController.php
+│   │   │   ├── 📁 Auth/
+│   │   │   │   ├── 🐘 AuthenticatedSessionController.php
+│   │   │   │   ├── 🐘 ConfirmablePasswordController.php
+│   │   │   │   ├── 🐘 EmailVerificationNotificationController.php
+│   │   │   │   ├── 🐘 EmailVerificationPromptController.php
+│   │   │   │   ├── 🐘 NewPasswordController.php
+│   │   │   │   ├── 🐘 PasswordController.php
+│   │   │   │   ├── 🐘 PasswordResetLinkController.php
+│   │   │   │   ├── 🐘 RegisteredUserController.php
+│   │   │   │   └── 🐘 VerifyEmailController.php
+│   │   │   ├── 📁 Traits/
+│   │   │   │   └── 🐘 HandlesDocumentServing.php
+│   │   │   ├── 🐘 CategoryController.php
+│   │   │   ├── 🐘 CommentController.php
+│   │   │   ├── 🐘 Controller.php
+│   │   │   ├── 🐘 DocumentController.php
+│   │   │   ├── 🐘 DocumentFileController.php
+│   │   │   ├── 🐘 DownloadController.php
+│   │   │   ├── 🐘 FileRequestController.php
+│   │   │   ├── 🐘 FolderController.php
+│   │   │   ├── 🐘 HomeController.php
+│   │   │   ├── 🐘 NotificationController.php
+│   │   │   ├── 🐘 ProfileController.php
+│   │   │   ├── 🐘 SearchController.php
+│   │   │   ├── 🐘 SettingsController.php
+│   │   │   ├── 🐘 ShareDocumentController.php
+│   │   │   ├── 🐘 StarredController.php
+│   │   │   ├── 🐘 StegoWebController.php
+│   │   │   ├── 🐘 TagController.php
+│   │   │   ├── 🐘 UserController.php
+│   │   │   └── 🐘 UserManagementController.php
+│   │   ├── 📁 Middleware/
+│   │   │   └── 🐘 HandleInertiaRequests.php
+│   │   └── 📁 Requests/
+│   │       ├── 📁 Auth/
+│   │       │   └── 🐘 LoginRequest.php
+│   │       ├── 🐘 ProfileUpdateRequest.php
+│   │       ├── 🐘 StoreCategoryRequest.php
+│   │       ├── 🐘 StoreDocumentRequest.php
+│   │       ├── 🐘 StoreFileRequestRequest.php
+│   │       ├── 🐘 StoreFolderRequest.php
+│   │       ├── 🐘 StoreNotificationRequest.php
+│   │       ├── 🐘 StoreShareDocumentRequest.php
+│   │       ├── 🐘 StoreTagRequest.php
+│   │       ├── 🐘 UpdateCategoryRequest.php
+│   │       ├── 🐘 UpdateDocumentRequest.php
+│   │       ├── 🐘 UpdateFileRequestRequest.php
+│   │       ├── 🐘 UpdateFolderRequest.php
+│   │       ├── 🐘 UpdateNotificationRequest.php
+│   │       ├── 🐘 UpdateShareDocumentRequest.php
+│   │       └── 🐘 UpdateTagRequest.php
+│   ├── 📁 Jobs/
+│   │   ├── 🐘 DecodeStegoDocumentJob.php
+│   │   ├── 🐘 EncodeStegoDocumentJob.php
+│   │   ├── 🐘 PreprocessUploadedDocumentJob.php
+│   │   ├── 🐘 RunStegoPostUploadWorkflowJob.php
+│   │   ├── 🐘 SendDocumentJob.php
+│   │   ├── 🐘 SendFileRequestEmail.php
+│   │   ├── 🐘 ValidateCarrierJob.php
+│   │   └── 🐘 ValidateUploadedDocumentJob.php
+│   ├── 📁 Mail/
+│   │   ├── 🐘 FileRequestNotification.php
+│   │   └── 🐘 SendDocumentEmail.php
+│   ├── 📁 Models/
+│   │   ├── 🐘 AccessLog.php
+│   │   ├── 🐘 B2UploadSession.php
+│   │   ├── 🐘 Category.php
+│   │   ├── 🐘 Comment.php
+│   │   ├── 🐘 Document.php
+│   │   ├── 🐘 DocumentWatcher.php
+│   │   ├── 🐘 Emoji.php
+│   │   ├── 🐘 FileRequest.php
+│   │   ├── 🐘 Folder.php
+│   │   ├── 🐘 Notification.php
+│   │   ├── 🐘 RoleGrant.php
+│   │   ├── 🐘 ShareDocument.php
+│   │   ├── 🐘 StegoCarrier.php
+│   │   ├── 🐘 StegoDocument.php
+│   │   ├── 🐘 StegoDocumentGrant.php
+│   │   ├── 🐘 StegoSegment.php
+│   │   ├── 🐘 Tag.php
+│   │   └── 🐘 User.php
+│   ├── 📁 Policies/
+│   │   ├── 🐘 CategoryPolicy.php
+│   │   ├── 🐘 DocumentPolicy.php
+│   │   ├── 🐘 FileRequestPolicy.php
+│   │   ├── 🐘 FolderPolicy.php
+│   │   ├── 🐘 NotificationPolicy.php
+│   │   ├── 🐘 ShareDocumentPolicy.php
+│   │   ├── 🐘 StegoDocumentPolicy.php
+│   │   ├── 🐘 TagPolicy.php
+│   │   └── 🐘 UserPolicy.php
+│   ├── 📁 Providers/
+│   │   ├── 🐘 AppServiceProvider.php
+│   │   └── 🐘 AuthServiceProvider.php
+│   └── 📁 Services/
+│       ├── 📁 Stego/
+│       │   ├── 🐘 CarrierPoolSelector.php
+│       │   ├── 🐘 CloudStorageService.php
+│       │   ├── 🐘 CryptoService.php
+│       │   ├── 🐘 PersistenceService.php
+│       │   ├── 🐘 SegmentationService.php
+│       │   ├── 🐘 StegoDocumentService.php
+│       │   └── 🐘 StegoService.php
+│       ├── 🐘 DocumentAccessService.php
+│       ├── 🐘 DocumentEncryptionService.php
+│       ├── 🐘 DocumentFileService.php
+│       ├── 🐘 DocumentNotificationService.php
+│       ├── 🐘 DocumentService.php
+│       ├── 🐘 ErrorHandlingService.php
+│       ├── 🐘 FolderService.php
+│       └── 🐘 NotificationService.php
+├── 📁 bootstrap/
+│   ├── 🐘 app.php
+│   └── 🐘 providers.php
+├── 📁 config/
+│   ├── 🐘 app.php
+│   ├── 🐘 auth.php
+│   ├── 🐘 cache.php
+│   ├── 🐘 database.php
+│   ├── 🐘 filesystems.php
+│   ├── 🐘 logging.php
+│   ├── 🐘 mail.php
+│   ├── 🐘 queue.php
+│   ├── 🐘 services.php
+│   ├── 🐘 session.php
+│   └── 🐘 stegolock.php
+├── 📁 database/
+│   ├── 📁 factories/
+│   │   ├── 🐘 CategoryFactory.php
+│   │   ├── 🐘 DocumentFactory.php
+│   │   ├── 🐘 FileRequestFactory.php
+│   │   ├── 🐘 FolderFactory.php
+│   │   ├── 🐘 NotificationFactory.php
+│   │   ├── 🐘 ShareDocumentFactory.php
+│   │   ├── 🐘 StegoCarrierFactory.php
+│   │   ├── 🐘 StegoDocumentFactory.php
+│   │   ├── 🐘 StegoDocumentGrantFactory.php
+│   │   ├── 🐘 TagFactory.php
+│   │   └── 🐘 UserFactory.php
+│   ├── 📁 migrations/
+│   │   ├── 🐘 2026_04_07_000001_create_initial_tables.php
+│   │   ├── 🐘 2026_04_07_000002_create_core_content_tables.php
+│   │   ├── 🐘 2026_04_07_000003_create_taxonomy_tables.php
+│   │   ├── 🐘 2026_04_07_000004_create_acl_tables.php
+│   │   ├── 🐘 2026_04_07_000005_create_emoji_tables.php
+│   │   ├── 🐘 2026_04_07_000006_create_stego_tables.php
+│   │   ├── 🐘 2026_04_07_000007_create_sharing_tables.php
+│   │   ├── 🐘 2026_04_07_000008_create_document_watchers_table.php
+│   │   ├── 🐘 2026_04_09_000009_create_b2_upload_sessions_table.php
+│   │   ├── 🐘 2026_04_09_000010_add_ingest_status_to_documents_table.php
+│   │   └── 🐘 2026_04_16_000011_add_envelope_key_fields_to_stego_tables.php
+│   ├── 📁 seeders/
+│   │   ├── 🐘 CategorySeeder.php
+│   │   ├── 🐘 DatabaseSeeder.php
+│   │   ├── 🐘 DocumentSeeder.php
+│   │   ├── 🐘 FileRequestSeeder.php
+│   │   ├── 🐘 FolderSeeder.php
+│   │   ├── 🐘 NotificationSeeder.php
+│   │   ├── 🐘 RoleSeeder.php
+│   │   ├── 🐘 ShareDocumentSeeder.php
+│   │   ├── 🐘 SystemCarrierSeeder.php
+│   │   ├── 🐘 TagSeeder.php
+│   │   └── 🐘 UserSeeder.php
+│   └── ⚙️ .gitignore
+├── 📁 docs/
+│   ├── ⚙️ b2-cors-policy.json
+│   ├── 📝 cloudflare-r2-setup.md
+│   ├── 📝 document-visibility-sharing-system.md
+│   ├── 📝 env-variables.md
+│   ├── 📝 frontend-active-vs-legacy-audit.md
+│   ├── 📝 phase2-api-endpoints.md
+│   ├── 📝 r2-configuration.md
+│   └── 📝 r2-test-script.md
+├── 📁 plans/
+│   ├── 📝 capacity-planning-tools-ui.md
+│   ├── 📝 collaboration-architecture.md
+│   ├── 📝 folder-sharing-plan.md
+│   ├── 📝 role-based-ui-architecture.md
+│   └── 📝 role-based-ui-implementation.md
+├── 📁 public/
+│   ├── 📁 custom-css/
+│   │   └── 🎨 documents12.css
+│   ├── 📁 custom-js/
+│   │   ├── 📄 addFolder.js
+│   │   ├── 📄 addUrl.js
+│   │   ├── 📄 documents1001.js
+│   │   ├── 📄 request.js
+│   │   ├── 📄 share.js
+│   │   └── 📄 uploadFolder.js
+│   ├── 📁 documents/
+│   │   ├── 📁 Test/
+│   │   │   └── 📕 7861-Article Text-17349-2-10-20250104.pdf
+│   │   └── 📁 folder/
+│   │       └── 📕 Module 3 Lesson 2 - The Patent Claim and Claim Design.pdf
+│   ├── ⚙️ .htaccess
+│   ├── ⚙️ .user.ini
+│   ├── 📄 favicon.ico
+│   ├── 🐘 index.php
+│   └── 📄 robots.txt
+├── 📁 python/
+│   └── 🐍 stego_lsb.py
+├── 📁 resources/
+│   ├── 📁 css/
+│   │   └── 🎨 app.css
+│   ├── 📁 js/
+│   │   ├── 📁 Components/
+│   │   │   ├── 📁 upload/
+│   │   │   │   ├── 📄 SelectedFilesList.tsx
+│   │   │   │   └── 📄 UploadProgress.tsx
+│   │   │   ├── 📄 AdvancedSearchModal.tsx
+│   │   │   ├── 📄 ApplicationLogo.tsx
+│   │   │   ├── 📄 Avatar.tsx
+│   │   │   ├── 📄 Checkbox.tsx
+│   │   │   ├── 📄 Comments.tsx
+│   │   │   ├── 📄 DangerButton.tsx
+│   │   │   ├── 📄 DocumentPreview.tsx
+│   │   │   ├── 📄 DragDropUploadModal.tsx
+│   │   │   ├── 📄 Dropdown.tsx
+│   │   │   ├── 📄 InputError.tsx
+│   │   │   ├── 📄 InputLabel.tsx
+│   │   │   ├── 📄 Modal.tsx
+│   │   │   ├── 📄 NavLink.tsx
+│   │   │   ├── 📄 NotificationBell.tsx
+│   │   │   ├── 📄 PrimaryButton.tsx
+│   │   │   ├── 📄 ResponsiveNavLink.tsx
+│   │   │   ├── 📄 RolePermissions.tsx
+│   │   │   ├── 📄 SecondaryButton.tsx
+│   │   │   ├── 📄 ShareModal.tsx
+│   │   │   ├── 📄 SimpleUploadModal.tsx
+│   │   │   ├── 📄 TextInput.tsx
+│   │   │   └── 📄 UploadModal.tsx
+│   │   ├── 📁 Layouts/
+│   │   │   ├── 📄 AuthenticatedLayout.tsx
+│   │   │   └── 📄 GuestLayout.tsx
+│   │   ├── 📁 Pages/
+│   │   │   ├── 📁 Auth/
+│   │   │   │   ├── 📄 ConfirmPassword.tsx
+│   │   │   │   ├── 📄 ForgotPassword.tsx
+│   │   │   │   ├── 📄 Login.tsx
+│   │   │   │   ├── 📄 Register.tsx
+│   │   │   │   ├── 📄 ResetPassword.tsx
+│   │   │   │   └── 📄 VerifyEmail.tsx
+│   │   │   ├── 📁 Categories/
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Contacts/
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Documents/
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Folders/
+│   │   │   │   ├── 📄 Create.tsx
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Profile/
+│   │   │   │   ├── 📁 Partials/
+│   │   │   │   │   ├── 📄 DeleteUserForm.tsx
+│   │   │   │   │   ├── 📄 UpdatePasswordForm.tsx
+│   │   │   │   │   └── 📄 UpdateProfileInformationForm.tsx
+│   │   │   │   └── 📄 Edit.tsx
+│   │   │   ├── 📁 Projects/
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Search/
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Settings/
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Shares/
+│   │   │   │   └── 📄 Folder.tsx
+│   │   │   ├── 📁 Starred/
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Stego/
+│   │   │   │   ├── 📄 CarrierPool.tsx
+│   │   │   │   ├── 📄 Decode.tsx
+│   │   │   │   ├── 📄 Encode.tsx
+│   │   │   │   ├── 📄 Index.tsx
+│   │   │   │   └── 📄 Tokens.tsx
+│   │   │   ├── 📁 Tags/
+│   │   │   │   └── 📄 Index.tsx
+│   │   │   ├── 📁 Users/
+│   │   │   │   └── 📄 Roles.tsx
+│   │   │   ├── 📄 Dashboard.tsx
+│   │   │   ├── 📄 Home.tsx
+│   │   │   └── 📄 Welcome.tsx
+│   │   ├── 📁 hooks/
+│   │   │   ├── 📄 useCarrierManagement.ts
+│   │   │   ├── 📄 useCarrierPool.ts
+│   │   │   ├── 📄 useEncodeForm.ts
+│   │   │   └── 📄 usePreflightVerification.ts
+│   │   ├── 📁 stegolock-spa/
+│   │   │   ├── 📁 components/
+│   │   │   │   └── 📄 SpaLayout.tsx
+│   │   │   ├── 📁 hooks/
+│   │   │   │   └── 📄 useAuth.tsx
+│   │   │   ├── 📁 pages/
+│   │   │   │   ├── 📄 Dashboard.tsx
+│   │   │   │   ├── 📄 Decode.tsx
+│   │   │   │   ├── 📄 Encode.tsx
+│   │   │   │   ├── 📄 Login.tsx
+│   │   │   │   ├── 📄 StegoIndex.tsx
+│   │   │   │   └── 📄 Tokens.tsx
+│   │   │   ├── 📄 App.tsx
+│   │   │   └── 📄 main.tsx
+│   │   ├── 📁 types/
+│   │   │   ├── 📄 components.ts
+│   │   │   ├── 📄 entities.ts
+│   │   │   ├── 📄 global.d.ts
+│   │   │   ├── 📄 index.d.ts
+│   │   │   └── 📄 vite-env.d.ts
+│   │   ├── 📁 utils/
+│   │   │   ├── 📄 carrierCalculations.ts
+│   │   │   └── 📄 directUpload.ts
+│   │   ├── 📄 app.tsx
+│   │   └── 📄 bootstrap.ts
+│   └── 📁 views/
+│       ├── 📁 components/
+│       │   ├── 🐘 avatar.blade.php
+│       │   ├── 🐘 modal.blade.php
+│       │   └── 🐘 notFound.blade.php
+│       ├── 📁 documents/
+│       │   ├── 📁 uploads/
+│       │   │   ├── 🐘 addUrl.blade.php
+│       │   │   ├── 🐘 requestDocument.blade.php
+│       │   │   ├── 🐘 shareDocument.blade.php
+│       │   │   └── 🐘 uploadFolder.blade.php
+│       │   └── 🐘 previewDocument.blade.php
+│       ├── 📁 emails/
+│       │   ├── 🐘 file_request_notification.blade.php
+│       │   └── 🐘 send-document.blade.php
+│       ├── 📁 folders/
+│       │   ├── 📁 modals/
+│       │   │   ├── 🐘 addFolder.blade.php
+│       │   │   └── 🐘 addTag.blade.php
+│       │   ├── 🐘 folder_item.blade.php
+│       │   ├── 🐘 parentfolder.blade.php
+│       │   ├── 🐘 subfolders.blade.php
+│       │   ├── 🐘 table.blade.php
+│       │   └── 🐘 tags.blade.php
+│       ├── 📁 layouts/
+│       │   ├── 🐘 app.blade.php
+│       │   ├── 🐘 header.blade.php
+│       │   ├── 🐘 navbar-search.blade.php
+│       │   ├── 🐘 navbar.blade.php
+│       │   └── 🐘 shareApp.blade.php
+│       ├── 📁 notifications/
+│       │   ├── 🐘 fetch.blade.php
+│       │   ├── 🐘 list.blade.php
+│       │   └── 🐘 show.blade.php
+│       ├── 📁 shares/
+│       │   ├── 🐘 documents.blade.php
+│       │   ├── 🐘 expired.blade.php
+│       │   ├── 🐘 index.blade.php
+│       │   ├── 🐘 no-permission.blade.php
+│       │   ├── 🐘 preview.blade.php
+│       │   └── 🐘 singleDocument.blade.php
+│       ├── 📁 tags/
+│       │   └── 🐘 table.blade.php
+│       ├── 🐘 app.blade.php
+│       └── 🐘 stegolock.blade.php
+├── 📁 routes/
+│   ├── 🐘 api.php
+│   ├── 🐘 auth.php
+│   ├── 🐘 console.php
+│   └── 🐘 web.php
+├── 📁 scripts/
+│   ├── 🐘 apply-b2-cors.php
+│   ├── 🐘 apply-b2-native-cors.php
+│   ├── 🐘 test-b2-put-preflight.php
+│   ├── 🐘 test-cloud-storage-roundtrip.php
+│   └── 🐘 test-r2-connection.php
+├── 📁 storage/
+│   ├── 📁 app/
+│   │   └── ⚙️ .gitignore
+│   ├── 📁 framework/
+│   │   ├── 📁 sessions/
+│   │   │   └── ⚙️ .gitignore
+│   │   ├── 📁 testing/
+│   │   │   ├── 📁 disks/
+│   │   │   │   └── 📁 local/
+│   │   │   │       └── 📁 stego-tmp/
+│   │   │   └── ⚙️ .gitignore
+│   │   ├── 📁 views/
+│   │   │   ├── ⚙️ .gitignore
+│   │   │   ├── 🐘 0c0209a99d3dd031e551ee117838923f.php
+│   │   │   ├── 🐘 2ca6ed0181e363a5d05d716eab325fff.php
+│   │   │   ├── 🐘 40be07a0607cb7c172be841f8e017c9d.php
+│   │   │   ├── 🐘 736482df08da65267bb29bab13ce264c.php
+│   │   │   ├── 🐘 7cd076e644019c4e7bd081111a01e141.php
+│   │   │   ├── 🐘 7e568f2c0d5b98a9af64f9c5d6368a01.php
+│   │   │   ├── 🐘 9268c1bda60c2a28e695381dd9fb47bb.php
+│   │   │   └── 🐘 b28b911d65acfdff235bba452b84c0f9.php
+│   │   └── ⚙️ .gitignore
+│   └── 📁 logs/
+│       ├── 📁 cloud-tests/
+│       │   └── ⚙️ cloud-storage-roundtrip-20260330_072305_d70bf6.json
+│       └── ⚙️ .gitignore
+├── 📁 tests/
+│   ├── 📁 Feature/
+│   │   ├── 📁 Api/
+│   │   │   ├── 🐘 AuthTokenManagementTest.php
+│   │   │   ├── 🐘 B2UploadApiTest.php
+│   │   │   ├── 🐘 CarrierPoolTest.php
+│   │   │   ├── 🐘 RoleControllerTest.php
+│   │   │   ├── 🐘 StegoApiTest.php
+│   │   │   └── 🐘 UserControllerTest.php
+│   │   ├── 📁 Auth/
+│   │   │   ├── 🐘 AuthenticationTest.php
+│   │   │   ├── 🐘 EmailVerificationTest.php
+│   │   │   ├── 🐘 MkdAuthTest.php
+│   │   │   ├── 🐘 PasswordConfirmationTest.php
+│   │   │   ├── 🐘 PasswordResetTest.php
+│   │   │   ├── 🐘 PasswordUpdateTest.php
+│   │   │   └── 🐘 RegistrationTest.php
+│   │   ├── 📁 Phase2/
+│   │   │   └── 🐘 DocumentFileRoutesTest.php
+│   │   ├── 📁 Phase4/
+│   │   │   ├── 🐘 PerformanceBenchmarkTest.php
+│   │   │   ├── 🐘 QueryOptimizationValidationTest.php
+│   │   │   └── 🐘 ServicesIntegrationTest.php
+│   │   ├── 📁 Stego/
+│   │   │   ├── 🐘 DecodeStegoDocumentJobTest.php
+│   │   │   └── 🐘 SharedStegoDocumentDecodeTest.php
+│   │   ├── 🐘 DocumentVisibilityTest.php
+│   │   ├── 🐘 ExampleTest.php
+│   │   ├── 🐘 ProfileTest.php
+│   │   ├── 🐘 ShareDocumentControllerTest.php
+│   │   ├── 🐘 ShareDocumentEdgeCasesTest.php
+│   │   └── 🐘 StegoEnvelopeKeySharingTest.php
+│   ├── 📁 Unit/
+│   │   ├── 📁 Controllers/
+│   │   │   └── 🐘 DocumentControllerDelegationTest.php
+│   │   ├── 📁 Http/
+│   │   │   └── 📁 Requests/
+│   │   │       └── 🐘 StoreShareDocumentRequestTest.php
+│   │   ├── 📁 Models/
+│   │   │   └── 🐘 ShareDocumentTest.php
+│   │   ├── 📁 Policies/
+│   │   │   └── 🐘 ShareDocumentPolicyTest.php
+│   │   ├── 📁 Services/
+│   │   │   ├── 📁 Stego/
+│   │   │   │   └── 🐘 CryptoEnvelopeTest.php
+│   │   │   └── 🐘 DocumentServiceBindingsTest.php
+│   │   ├── 🐘 CryptoServiceTest.php
+│   │   ├── 🐘 ExampleTest.php
+│   │   ├── 🐘 SegmentationServiceTest.php
+│   │   ├── 🐘 StegoDecodePipelineTest.php
+│   │   └── 🐘 StegoEncodeDecodeTest.php
+│   ├── 🐘 TestCase.php
+│   ├── 🐘 phase3_api_test.php
+│   ├── 🐘 stegolock_phase_test.php
+│   ├── 🐘 test-document-visibility.php
+│   ├── 🐘 test_command.php
+│   ├── 🐘 test_file_validation.php
+│   ├── 🐘 test_file_validation2.php
+│   ├── 🐘 test_route_stack.php
+│   ├── 🐘 test_stego_error.php
+│   ├── 🐘 test_upload.php
+│   └── 🐘 test_upload_fix.php
+├── ⚙️ .editorconfig
+├── ⚙️ .env.example
+├── ⚙️ .gitattributes
+├── ⚙️ .gitignore
+├── ⚙️ .kilocodeignore
+├── 📝 Architecture Changes.md
+├── 📝 README.md
+├── 📝 USER_GUIDE.md
+├── 📄 artisan
+├── ⚙️ composer.json
+├── 📄 erd.dbdiagram
+├── 📄 erd.dbml
+├── ⚙️ package.json
+├── ⚙️ phpunit.xml
+├── ⚙️ pnpm-lock.yaml
+├── 📄 postcss.config.js
+├── 🐘 server.php
+├── 📄 tailwind.config.js
+├── ⚙️ tsconfig.json
+├── ⚙️ tsconfig.node.json
+└── 📄 vite.config.js
+
+────────────────────────────────────────────────────────────────────────────────
+Generated by FileTree Pro Extension

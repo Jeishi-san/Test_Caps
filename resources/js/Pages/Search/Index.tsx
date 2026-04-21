@@ -6,6 +6,7 @@ import DocumentPreview from '@/Components/DocumentPreview';
 import AdvancedSearchModal from '@/Components/AdvancedSearchModal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import { formatFileSize } from '@/utils/fileSize';
 
 interface Document {
     id: number;
@@ -31,14 +32,6 @@ export default function Index({ auth, results, query, filters }: SearchPageProps
     const [showSearchModal, setShowSearchModal] = useState(false);
     const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
     const [showPreview, setShowPreview] = useState(false);
-
-    const formatFileSize = (bytes: number) => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-    };
 
     const getFileIcon = (extension: string) => {
         const iconMap: Record<string, string> = {

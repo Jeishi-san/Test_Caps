@@ -1,142 +1,48 @@
 ﻿import { useEffect, useState } from 'react';
 import axios from 'axios';
 import SpaLayout from '../components/SpaLayout';
-
-interface StegoDoc {
-    id: number;
-    document: { id: number; name: string; extension: string } | null;
-    status: 'pending' | 'ready' | 'failed';
-    segments_count: number;
-    created_at: string;
-    decoding_status?: string;
-    decoding_error?: string;
-    download_path?: string;
-}
+import { useStegoDecode } from '@/hooks/useStegoDecode';
 
 export default function Decode() {
-    const [docs, setDocs] = useState<StegoDoc[]>([]);
-    const [selected, setSelected] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [loadingList, setLoadingList] = useState(false);
     const [sessionExpired, setSessionExpired] = useState(false);
-    const [decodingStatus, setDecodingStatus] = useState<string | null>(null);
-    const [isDownloading, setIsDownloading] = useState(false);
+    const {
+        docs,
+        setDocs,
+        selected,
+        setSelected,
+        decodingStatus,
+        isSubmitting,
+        isDownloading,
+        submitError,
+        setSubmitError,
+        startDecode,
+        downloadDecoded,
+    } = useStegoDecode({
+        initialDocs: [],
+        suppressUnauthorizedError: true,
+        onUnauthorized: () => setSessionExpired(true),
+    });
 
     useEffect(() => {
-        axios.get('/api/stego?status=ready').then((r) => setDocs(r.data.data ?? r.data)).catch(console.error);
+        setLoadingList(true);
+        axios
+            .get('/api/stego?status=ready')
+            .then((r) => setDocs(r.data.data ?? r.data))
+            .catch(() => setSubmitError('Failed to load decode list.'))
+            .finally(() => setLoadingList(false));
     }, []);
 
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (decodingStatus && ['pending', 'in_progress'].includes(decodingStatus)) {
-            interval = setInterval(() => {
-                checkDecodingStatus();
-            }, 2000);
-        }
-        return () => clearInterval(interval);
-    }, [decodingStatus]);
-
-    const checkDecodingStatus = async () => {
-        if (!selected) return;
-
-        try {
-            const response = await axios.get(`/api/stego/documents/${selected}/status`);
-            const statusData = response.data;
-
-            if (!statusData || typeof statusData !== 'object' || !statusData.status) {
-                throw new Error('Invalid status response from server.');
-            }
-
-            const nextStatus = statusData.status as string;
-            
-            setDocs(prevDocs => prevDocs.map(doc => 
-                doc.id === parseInt(selected) ? { 
-                    ...doc, 
-                    decoding_status: nextStatus,
-                    decoding_error: statusData.error,
-                    download_path: statusData.download_path
-                } : doc
-            ));
-
-            setDecodingStatus(nextStatus);
-
-            if (nextStatus === 'completed') {
-                // Decoding is complete, show download button
-                setDecodingStatus('completed');
-            } else if (nextStatus === 'failed') {
-                // Decoding failed
-                setError(statusData.error || 'Decoding failed.');
-            }
-        } catch (error: unknown) {
-            console.error('Error checking decoding status:', error);
-            if (error instanceof Error) {
-                setError(error.message);
-            } else {
-                setError('Failed to check decoding status.');
-            }
-        }
-    };
-
     const handleDecode = async () => {
-        setError('');
+        setSubmitError('');
         setSessionExpired(false);
-        setLoading(true);
-        try {
-            const res = await axios.post('/api/stego/decode', {
-                stego_document_id: Number(selected),
-            });
-
-            if (!res || (res.status !== 200 && res.status !== 202)) {
-                throw new Error('Decode request was not accepted by the server.');
-            }
-            
-            // Set initial decoding status
-            setDecodingStatus('pending');
-            
-            // Update docs with initial status
-            setDocs(prevDocs => prevDocs.map(doc => 
-                doc.id === parseInt(selected) ? { ...doc, decoding_status: 'pending' } : doc
-            ));
-        } catch (e: any) {
-            if (e.response?.status === 401) {
-                setSessionExpired(true);
-            } else if (e.response?.data?.message) {
-                setError(e.response.data.message);
-            } else {
-                setError('Decoding failed.');
-            }
-        } finally {
-            setLoading(false);
-        }
+        await startDecode();
     };
 
     const handleDownload = async () => {
-        if (!selected || isDownloading) return;
-
-        setIsDownloading(true);
-
-        try {
-            const res = await axios.get(`/api/stego/decode/${selected}`, { responseType: 'blob' });
-            const doc = docs.find((d) => String(d.id) === selected);
-            const filename = (doc?.document?.name ?? 'decoded') + '.' + (doc?.document?.extension ?? 'bin');
-            const url = URL.createObjectURL(new Blob([res.data]));
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
-        } catch (e: any) {
-            if (e.response?.status === 401) {
-                setSessionExpired(true);
-            } else if (e.response?.data instanceof Blob) {
-                const text = await e.response.data.text();
-                try { setError(JSON.parse(text).message ?? 'Download failed.'); } catch { setError('Download failed.'); }
-            } else {
-                setError(e.response?.data?.message ?? 'Download failed.');
-            }
-        } finally {
-            setIsDownloading(false);
-        }
+        setSubmitError('');
+        setSessionExpired(false);
+        await downloadDecoded();
     };
 
     return (
@@ -154,9 +60,9 @@ export default function Decode() {
                     ⚠️ Your session has expired. Please <a href="/login" className="underline font-medium">log in again</a> to refresh your Master Key.
                 </div>
             )}
-            {error && (
+            {submitError && (
                 <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    ⚠️ {error}
+                    ⚠️ {submitError}
                 </div>
             )}
 
@@ -171,6 +77,9 @@ export default function Decode() {
 
             <div className="rounded-xl bg-white p-6 shadow-sm">
                 <h2 className="mb-4 font-semibold text-gray-800">Select stego document to decode</h2>
+                {loadingList && (
+                    <p className="mb-3 text-sm text-gray-500">Loading decode list...</p>
+                )}
                 {docs.length === 0 ? (
                     <p className="text-sm text-gray-500">No ready stego documents found. Encode one first, then wait for processing to finish.</p>
                 ) : (
@@ -199,8 +108,8 @@ export default function Decode() {
                             {isDownloading ? 'Downloading…' : '📥 Download'}
                         </button>
                     ) : (
-                        <button onClick={handleDecode} disabled={!selected || loading || decodingStatus === 'in_progress'} className="rounded-md bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-40">
-                            {loading ? 'Decoding…' : '🔓 Decode'}
+                        <button onClick={handleDecode} disabled={!selected || isSubmitting || decodingStatus === 'in_progress'} className="rounded-md bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-40">
+                            {isSubmitting ? 'Decoding…' : '🔓 Decode'}
                         </button>
                     )}
                 </div>

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useForm } from '@inertiajs/react';
 import { CarrierInfo } from './useCarrierManagement';
 import { dataNeededBytes } from '@/utils/carrierCalculations';
+import { useStegoEncode } from '@/hooks/useStegoEncode';
 
 interface PoolCarrierInfo {
   id: number;
@@ -65,10 +66,16 @@ export function useEncodeForm({
   setSuccessMsg,
   documents,
 }: UseEncodeFormParams): UseEncodeFormReturn {
-  const [step, setStep] = useState<1 | 2>(1);
-  const [selectedCarriers, setSelectedCarriers] = useState<CarrierInfo[]>([]);
-  const [isSelectingCarriers, setIsSelectingCarriers] = useState(false);
-  const [useSystemCarriers, setUseSystemCarriers] = useState(false);
+  const {
+    step,
+    setStep,
+    selectedCarriers,
+    setSelectedCarriers,
+    isSelectingCarriers,
+    useSystemCarriers,
+    setUseSystemCarriers,
+    runCarrierSelection,
+  } = useStegoEncode({ initialStep: 1 });
 
   const { data, setData, post, processing, reset } = useForm<{
     document_id: string;
@@ -77,6 +84,16 @@ export function useEncodeForm({
     document_id: '',
     carriers: [],
   });
+
+  // Computed values
+  const selectedDoc = documents.find((d) => String(d.id) === data.document_id);
+  const dataNeeded = selectedDoc ? dataNeededBytes(selectedDoc.size) : 0;
+  const totalCapacity = carriers.reduce((sum, c) => sum + (c.capacity ?? 0), 0);
+  const allLoaded = carriers.length > 0 && carriers.every((c) => !c.loading);
+  const capacityOk = allLoaded && totalCapacity >= dataNeeded;
+
+  const canGoNext1 = !!data.document_id;
+  const canSubmit = canGoNext1 && (carriers.length > 0 || useSystemCarriers || autoSelectedCarriers.length > 0) && capacityOk;
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,28 +106,8 @@ export function useEncodeForm({
       return;
     }
     
-    // Simulate carrier selection process (in reality, this happens on backend)
-    setIsSelectingCarriers(true);
-    setTimeout(() => {
-      // Simulate selection based on capacity (largest first)
-      const sortedCarriers = [...carriers]
-        .filter(c => c.capacity !== undefined && c.capacity > 0)
-        .sort((a, b) => (b.capacity ?? 0) - (a.capacity ?? 0));
-      
-      // Select carriers until we have enough capacity
-      const selected: CarrierInfo[] = [];
-      let accumulatedCapacity = 0;
-      const neededCapacity = dataNeeded;
-      
-      for (const carrier of sortedCarriers) {
-        if (accumulatedCapacity >= neededCapacity) break;
-        selected.push(carrier);
-        accumulatedCapacity += carrier.capacity ?? 0;
-      }
-      
-      setSelectedCarriers(selected);
-      setIsSelectingCarriers(false);
-    }, 500);
+    // Reuse shared orchestration hook for carrier selection behavior.
+    runCarrierSelection(dataNeeded, carriers as any);
     
     post(route('stego.encode'), {
       forceFormData: true,
@@ -132,7 +129,6 @@ export function useEncodeForm({
         if (firstErr) {
           setErrorMsg(String(firstErr));
         }
-        setIsSelectingCarriers(false);
       },
     });
   }, [
@@ -145,21 +141,12 @@ export function useEncodeForm({
     getPreflightParams,
     setErrorMsg,
     setSuccessMsg,
-    data,
     post,
     reset,
     useSystemCarriers,
+    runCarrierSelection,
+    dataNeeded,
   ]);
-
-  // Computed values
-  const selectedDoc = documents.find((d) => String(d.id) === data.document_id);
-  const dataNeeded = selectedDoc ? dataNeededBytes(selectedDoc.size) : 0;
-  const totalCapacity = carriers.reduce((sum, c) => sum + (c.capacity ?? 0), 0);
-  const allLoaded = carriers.length > 0 && carriers.every((c) => !c.loading);
-  const capacityOk = allLoaded && totalCapacity >= dataNeeded;
-
-  const canGoNext1 = !!data.document_id;
-  const canSubmit = canGoNext1 && (carriers.length > 0 || useSystemCarriers || autoSelectedCarriers.length > 0) && capacityOk;
 
   return {
     data,
@@ -168,7 +155,7 @@ export function useEncodeForm({
     processing,
     reset,
     step,
-    setStep,
+    setStep: setStep as React.Dispatch<React.SetStateAction<1 | 2>>,
     selectedCarriers,
     isSelectingCarriers,
     useSystemCarriers,

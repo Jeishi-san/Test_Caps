@@ -8,6 +8,7 @@ import DocumentPreview from '@/Components/DocumentPreview';
 import PrimaryButton from '@/Components/PrimaryButton';
 import ShareModal from '@/Components/ShareModal';
 import axios from 'axios';
+import { formatFileSize } from '@/utils/fileSize';
 
 interface DocumentsPageProps extends PageProps {
     documents: DocumentEntity[];
@@ -88,28 +89,10 @@ export default function Index({
         setShowShareModal(true);
     };
 
-    const formatFileSize = (bytes: number) => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-    };
-
-    const checkIfWatched = async (documentId: number) => {
-        try {
-            const response = await axios.get(`/documents/${documentId}/is-watched`);
-            return response.data.is_watched;
-        } catch (error) {
-            console.error('Failed to check if document is watched:', error);
-            return false;
-        }
-    };
-
     const handleWatch = async (documentId: number) => {
         try {
             await axios.post(`/documents/${documentId}/watch`);
-            setWatchedDocuments(prev => [...prev, documentId]);
+            setWatchedDocuments(prev => (prev.includes(documentId) ? prev : [...prev, documentId]));
         } catch (error) {
             console.error('Failed to watch document:', error);
         }
@@ -124,19 +107,22 @@ export default function Index({
         }
     };
 
-    // Load watched documents on component mount
+    // Load all watched document IDs in one request to avoid N+1 calls.
     useEffect(() => {
         const loadWatchedDocuments = async () => {
-            const watched = [];
-            for (const doc of documents) {
-                const isWatched = await checkIfWatched(doc.id);
-                if (isWatched) {
-                    watched.push(doc.id);
-                }
+            try {
+                const response = await axios.get('/documents/watched-ids');
+                const watchedIds = Array.isArray(response.data?.watched_document_ids)
+                    ? (response.data.watched_document_ids as number[])
+                    : [];
+                setWatchedDocuments(watchedIds);
+            } catch (error) {
+                console.error('Failed to load watched documents:', error);
+                setWatchedDocuments([]);
             }
-            setWatchedDocuments(watched);
         };
-        loadWatchedDocuments();
+
+        void loadWatchedDocuments();
     }, [documents]);
 
     const getFileIcon = (extension: string) => {
@@ -309,7 +295,7 @@ export default function Index({
                                                         </div>
                                                     </td>
                                                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                                                        {new Date(document.created_at).toLocaleDateString()}
+                                                        {document.created_at ? new Date(document.created_at).toLocaleDateString() : 'N/A'}
                                                     </td>
                             <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
                                  <div className="flex items-center justify-end gap-2">

@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link } from '@inertiajs/react';
 import { PageProps } from '@/types';
+import { formatFileSize } from '@/utils/fileSize';
 
 interface RecentDocument {
     id: number;
@@ -33,14 +34,6 @@ const FILE_ICONS: Record<string, string> = {
 
 function fileIcon(ext: string) {
     return FILE_ICONS[ext?.toLowerCase()] ?? '📎';
-}
-
-function formatBytes(bytes: number) {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
 }
 
 interface StatCardProps {
@@ -181,7 +174,7 @@ export default function Dashboard({ auth, stats, recentDocuments }: DashboardPro
                                                     </div>
                                                 </div>
                                                 <div className="text-right text-xs text-gray-400">
-                                                    <div>{formatBytes(doc.size)}</div>
+                                                    <div>{formatFileSize(doc.size, { decimals: 1, longBytesLabel: false })}</div>
                                                     <div>
                                                         {new Date(doc.created_at).toLocaleDateString()}
                                                     </div>

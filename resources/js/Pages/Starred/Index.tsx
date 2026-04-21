@@ -4,6 +4,7 @@ import { PageProps } from '@/types';
 import { useState } from 'react';
 import type { DocumentEntity, FolderEntity } from '@/types/entities';
 import axios from 'axios';
+import { formatFileSize } from '@/utils/fileSize';
 
 interface StarredPageProps extends PageProps {
     starredDocuments: DocumentEntity[];
@@ -48,14 +49,6 @@ export default function Index({
             zip: '🗜️',
         };
         return iconMap[extension?.toLowerCase()] || '📎';
-    };
-
-    const formatFileSize = (bytes: number) => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
     };
 
     return (

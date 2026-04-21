@@ -164,6 +164,7 @@ Table folders {
   name varchar [not null]
   parent_id bigint [ref: > folders.id]
   visibility "enum('public','private')" [default: 'public']
+  is_starred boolean [default: false]
   background_color varchar
   foreground_color varchar
   // NOTE: 'tags' varchar column removed — 1NF violation.
@@ -182,6 +183,7 @@ Table documents {
   position bigint [default: 0]
   // Flag: false = legacy plaintext file; true = AES-256-GCM encrypted at rest.
   is_encrypted boolean [default: false]
+  is_starred boolean [default: false]
   name varchar
   original_name varchar
   file_path varchar
@@ -204,6 +206,9 @@ Table documents {
   owner_id bigint [ref: > users.id]
   // RENAMED from 'date' (ambiguous, reserved word in SQL) → document_date.
   document_date timestamp
+  // Ingest processing status for document processing pipeline
+  ingest_status varchar(30) [default: 'ready']
+  ingest_error text
   // NOTE: 'emojis' varchar column is still present in the base schema (migration 2026_04_07_000002).
   //       The 1NF-fix migration (2026_04_06_000001) drops it and migrates data to emojiables.
   //       For fresh installs using consolidated migrations, this column exists until explicitly dropped.
@@ -473,6 +478,14 @@ Table stego_documents {
   stego_hash_sha256 varchar(64) // SHA-256 of original plaintext (nullable for pending status)
   stego_dek_salt varchar(64)    // hex-encoded DEK derivation salt
   stego_dek_iter int [default: 10000]      // PBKDF2 iteration count
+  // Envelope key wrapping mode for cross-user sharing
+  stego_mode "enum('legacy_derived','envelope_wrapped')" [default: 'legacy_derived']
+  // Owner-wrapped DEK metadata (for envelope mode)
+  owner_wrapped_dek text                   // Owner-wrapped DEK (base64), encrypted with owner master key
+  owner_wrapped_dek_iv varchar             // IV for owner DEK wrapping (base64)
+  owner_wrapped_dek_auth_tag varchar       // Auth tag for owner DEK wrapping (base64)
+  owner_wrapped_dek_alg varchar [default: 'AES-256-GCM'] // Key wrapping algorithm version
+  owner_wrapped_dek_version tinyint [default: 1]         // Key wrapping scheme version
   compressed boolean [default: true]        // Whether the ciphertext was compressed before encryption
   s3_key varchar
   // Decoding operation fields
@@ -513,6 +526,15 @@ Table stego_document_grants {
   stego_document_id bigint [not null, ref: > stego_documents.id]
   viewer_user_id bigint [not null, ref: > users.id]
   granted_by bigint [not null, ref: > users.id]
+  // Grant activation lifecycle: 'pending' (viewer has not accepted) or 'active' (viewer accepted + wrapped)
+  grant_status "enum('pending','active')" [default: 'pending']
+  accepted_at timestamp                                // Timestamp when viewer accepted share and uploaded wrapped DEK
+  // Viewer-wrapped DEK metadata (populated only when status is 'active')
+  viewer_wrapped_dek text                               // Viewer-wrapped DEK (base64), encrypted with viewer master key
+  viewer_wrapped_dek_iv varchar                         // IV for viewer DEK wrapping (base64)
+  viewer_wrapped_dek_auth_tag varchar                   // Auth tag for viewer DEK wrapping (base64)
+  viewer_wrapped_dek_alg varchar                        // Key wrapping algorithm used by viewer
+  viewer_wrapped_dek_version tinyint                    // Key wrapping scheme version when viewer accepted
   created_at timestamp
   updated_at timestamp
 
@@ -520,6 +542,8 @@ Table stego_document_grants {
     (stego_document_id, viewer_user_id) [unique]
     (viewer_user_id) [name: 'stego_grants_viewer_index']
     (granted_by) [name: 'stego_grants_grantor_index']
+    (viewer_user_id, grant_status)
+    (stego_document_id, grant_status)
   }
 }
 
@@ -536,5 +560,34 @@ Table document_watchers {
 
   indexes {
     (user_id, document_id) [unique]
+  }
+}
+
+Table b2_upload_sessions {
+  id bigint [pk, increment]
+  session_token uuid [unique]
+  idempotency_token varchar(100)
+  user_id bigint [not null, ref: > users.id]
+  object_key varchar [not null]
+  original_filename varchar [not null]
+  sanitized_filename varchar [not null]
+  expected_mime varchar(150) [not null]
+  expected_size bigint [not null]
+  checksum_sha256 varchar(64)
+  folder_id bigint [not null, ref: > folders.id]
+  visibility "enum('public','private')" [default: 'public']
+  status varchar(30) [default: 'signed']
+  error_message text
+  expires_at timestamp [not null]
+  uploaded_at timestamp
+  finalized_at timestamp
+  consumed_at timestamp
+  document_id bigint [ref: > documents.id]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (user_id, status)
+    (user_id, expires_at)
   }
 }

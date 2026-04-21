@@ -2,173 +2,46 @@
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import SpaLayout from '../components/SpaLayout';
+import { useStegoEncode } from '@/hooks/useStegoEncode';
 
 interface Document { id: number; name: string; extension: string; size: number }
-interface QualityMetric { carrier: string; psnr: number | null; threshold_40db: boolean }
-interface StegoEncodeStatusResponse {
-    id: number;
-    status: 'pending' | 'ready' | 'failed';
-    failed_reason?: string | null;
-    created_at?: string | null;
-    updated_at?: string | null;
-}
 type Step = 1 | 2 | 3;  // 3 = results
 
 export default function Encode() {
     const navigate = useNavigate();
     const [documents, setDocuments] = useState<Document[]>([]);
-    const [step, setStep] = useState<Step>(1);
     const [docId, setDocId] = useState('');
-    const [carriers, setCarriers] = useState<File[]>([]);
-    const [dragOver, setDragOver] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [errors, setErrors] = useState<Record<string, string>>({});
-    const [qualityMetrics, setQualityMetrics] = useState<QualityMetric[]>([]);
-    const [stegoDocumentId, setStegoDocumentId] = useState<number | null>(null);
-    const [encodeStatus, setEncodeStatus] = useState<'idle' | 'pending' | 'ready' | 'failed'>('idle');
-    const [encodeElapsedSeconds, setEncodeElapsedSeconds] = useState<number | null>(null);
-    const [encodeProcessingTimeSeconds, setEncodeProcessingTimeSeconds] = useState<number | null>(null);
-    const [encodeFailedReason, setEncodeFailedReason] = useState<string | null>(null);
-    const [encodeQueuedMessage, setEncodeQueuedMessage] = useState<string | null>(null);
+    const {
+        step,
+        setStep,
+        carriers,
+        setCarriers,
+        dragOver,
+        setDragOver,
+        loading,
+        errors,
+        setErrors,
+        qualityMetrics,
+        stegoDocumentId,
+        encodeStatus,
+        encodeElapsedSeconds,
+        encodeProcessingTimeSeconds,
+        encodeFailedReason,
+        encodeQueuedMessage,
+        formatSeconds,
+        addCarrierFiles,
+        removeCarrier,
+        submitEncode,
+    } = useStegoEncode({ initialStep: 1, pollIntervalMs: 1500 });
     const fileRef = useRef<HTMLInputElement>(null);
-    const pollTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         axios.get('/api/documents').then((r) => setDocuments(r.data.data ?? r.data)).catch(console.error);
     }, []);
 
-    useEffect(() => {
-        return () => {
-            if (pollTimerRef.current !== null) {
-                window.clearInterval(pollTimerRef.current);
-                pollTimerRef.current = null;
-            }
-        };
-    }, []);
-
-    const formatSeconds = (seconds: number | null): string => {
-        if (seconds === null || !Number.isFinite(seconds)) return '—';
-        if (seconds < 60) return `${seconds.toFixed(2)}s`;
-        const mins = Math.floor(seconds / 60);
-        const rem = seconds % 60;
-        return `${mins}m ${rem.toFixed(1)}s`;
-    };
-
-    const deriveSeconds = (createdAt?: string | null, updatedAt?: string | null): number | null => {
-        if (!createdAt || !updatedAt) return null;
-        const created = new Date(createdAt).getTime();
-        const updated = new Date(updatedAt).getTime();
-        if (!Number.isFinite(created) || !Number.isFinite(updated) || updated < created) return null;
-        return (updated - created) / 1000;
-    };
-
-    const deriveElapsedNow = (createdAt?: string | null): number | null => {
-        if (!createdAt) return null;
-        const created = new Date(createdAt).getTime();
-        if (!Number.isFinite(created)) return null;
-        return Math.max(0, (Date.now() - created) / 1000);
-    };
-
-    const stopPolling = () => {
-        if (pollTimerRef.current !== null) {
-            window.clearInterval(pollTimerRef.current);
-            pollTimerRef.current = null;
-        }
-    };
-
-    const pollEncodeStatus = async (id: number) => {
-        try {
-            const response = await axios.get<StegoEncodeStatusResponse>(`/api/stego/documents/${id}`);
-            const payload = response.data;
-
-            const status = payload.status;
-            setEncodeStatus(status);
-
-            if (status === 'ready' || status === 'failed') {
-                const duration = deriveSeconds(payload.created_at, payload.updated_at);
-                setEncodeProcessingTimeSeconds(duration);
-                setEncodeElapsedSeconds(duration);
-                setEncodeFailedReason(payload.failed_reason ?? null);
-                stopPolling();
-                return;
-            }
-
-            setEncodeElapsedSeconds(deriveElapsedNow(payload.created_at));
-        } catch (error: any) {
-            stopPolling();
-            setEncodeStatus('failed');
-            setEncodeFailedReason(error?.response?.data?.message ?? 'Failed to fetch encoding status.');
-        }
-    };
-
-    const startPolling = (id: number) => {
-        stopPolling();
-        void pollEncodeStatus(id);
-        pollTimerRef.current = window.setInterval(() => {
-            void pollEncodeStatus(id);
-        }, 1500);
-    };
-
-    const addFiles = (files: FileList | null) => {
-        if (!files) return;
-        const valid = Array.from(files).filter((f) =>
-            /\.(png|bmp|jpe?g)$/i.test(f.name) && f.size <= 100 * 1024 * 1024
-        );
-        const invalid = Array.from(files).filter((f) =>
-            !/\.(png|bmp|jpe?g)$/i.test(f.name) || f.size > 100 * 1024 * 1024
-        );
-        if (invalid.length > 0) {
-            const messages = [];
-            const invalidTypes = invalid.filter(f => !/\.(png|bmp|jpe?g)$/i.test(f.name));
-            const oversized = invalid.filter(f => f.size > 100 * 1024 * 1024);
-            if (invalidTypes.length > 0) {
-                messages.push(`Invalid type(s): ${invalidTypes.map(f => f.name).join(', ')} (only PNG/BMP/JPEG)`);
-            }
-            if (oversized.length > 0) {
-                messages.push(`Too large: ${oversized.map(f => f.name).join(', ')} (max 100 MB)`);
-            }
-            setErrors({ carriers: messages.join('. ') });
-        }
-        setCarriers((prev) => [...prev, ...valid]);
-    };
-
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        setErrors({});
-        setLoading(true);
-        const fd = new FormData();
-        fd.append('document_id', docId);
-        carriers.forEach((f) => fd.append('carriers[]', f));
-        try {
-            const res = await axios.post('/api/stego/encode', fd, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
-            const queuedId = Number(res.data?.stego_document_id ?? 0);
-            setStegoDocumentId(Number.isFinite(queuedId) && queuedId > 0 ? queuedId : null);
-            setQualityMetrics(res.data.quality_metrics ?? []);
-            setEncodeStatus('pending');
-            setEncodeElapsedSeconds(0);
-            setEncodeProcessingTimeSeconds(null);
-            setEncodeFailedReason(null);
-            setEncodeQueuedMessage(res.data?.message ?? 'Encoding queued. Waiting for completion...');
-
-            if (Number.isFinite(queuedId) && queuedId > 0) {
-                startPolling(queuedId);
-            }
-
-            setStep(3);
-        } catch (e: any) {
-            if (e.response?.status === 401) {
-                setErrors({ session: e.response.data?.message ?? 'Session expired. Please log in again.' });
-            } else {
-                setErrors(e.response?.data?.errors ?? { encode: e.response?.data?.message ?? 'Encoding failed.' });
-            }
-            stopPolling();
-            setStep(2);
-        } finally {
-            setLoading(false);
-        }
+        await submitEncode({ documentId: docId });
     };
 
     const steps = [
@@ -251,20 +124,20 @@ export default function Encode() {
                             <div
                                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                                 onDragLeave={() => setDragOver(false)}
-                                onDrop={(e) => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
+                                onDrop={(e) => { e.preventDefault(); setDragOver(false); addCarrierFiles(e.dataTransfer.files); }}
                                 onClick={() => fileRef.current?.click()}
                                 className={`cursor-pointer rounded-xl border-2 border-dashed p-8 text-center ${dragOver ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-indigo-400'}`}
                             >
                                 <div className="text-4xl mb-2">ðŸ–¼ï¸</div>
                                 <p className="text-sm text-gray-600">Drag & drop or <span className="text-indigo-600 underline">browse</span></p>
-                                <input ref={fileRef} type="file" accept=".png,.bmp,.jpg,.jpeg" multiple className="hidden" onChange={(e) => addFiles(e.target.files)} />
+                                <input ref={fileRef} type="file" accept=".png,.bmp,.jpg,.jpeg" multiple className="hidden" onChange={(e) => addCarrierFiles(e.target.files)} />
                             </div>
                             {carriers.length > 0 && (
                                 <ul className="mt-3 space-y-1">
                                     {carriers.map((f, i) => (
                                         <li key={i} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
-                                            <span className="truncate text-gray-700">{f.name}</span>
-                                            <button type="button" onClick={() => setCarriers((p) => p.filter((_, j) => j !== i))} className="ml-2 text-gray-400 hover:text-red-500">âœ•</button>
+                                            <span className="truncate text-gray-700">{f.file.name}</span>
+                                            <button type="button" onClick={() => removeCarrier(i)} className="ml-2 text-gray-400 hover:text-red-500">âœ•</button>
                                         </li>
                                     ))}
                                 </ul>

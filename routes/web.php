@@ -82,6 +82,7 @@ Route::middleware('auth')->group(function () {
 
     // Documents index (main app entry point for auth users)
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
+    Route::get('/documents/watched-ids', [DocumentController::class, 'watchedIds'])->name('documents.watchedIds');
 
     // Folder Index (list all folders)
     Route::get('/folders', [FolderController::class, 'index'])->name('folders.index');
