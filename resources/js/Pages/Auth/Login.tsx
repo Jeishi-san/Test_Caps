@@ -6,6 +6,7 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
+import { Mail, Lock } from 'lucide-react';
 
 export default function Login({
     status,
@@ -40,7 +41,7 @@ export default function Login({
 
             <form onSubmit={submit}>
 
-                <div>
+                <div className="mt-1">
                     <InputLabel htmlFor="email" value="Email" />
 
                     <TextInput
@@ -51,6 +52,7 @@ export default function Login({
                         className="mt-1 block w-full"
                         autoComplete="username"
                         isFocused={true}
+                        icon={<Mail className="w-5 h-5" />}
                         onChange={(e) => setData('email', e.target.value)}
                     />
 
@@ -67,6 +69,7 @@ export default function Login({
                         value={data.password}
                         className="mt-1 block w-full"
                         autoComplete="current-password"
+                        icon={<Lock className="w-5 h-5" />}
                         onChange={(e) => setData('password', e.target.value)}
                     />
 
@@ -91,19 +94,33 @@ export default function Login({
                     </label>
                 </div>
 
-                <div className="mt-4 flex items-center justify-end">
+                <div className="mt-6">
                     {canResetPassword && (
-                        <Link
-                            href={route('password.request')}
-                            className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                        >
-                            Forgot your password?
-                        </Link>
+                        <div className="text-right mb-4">
+                            <Link
+                                href={route('password.request')}
+                                className="text-sm text-gray-600 hover:text-gray-900"
+                            >
+                                Forgot your password?
+                            </Link>
+                        </div>
                     )}
 
-                    <PrimaryButton className="ms-4" disabled={processing}>
+                    <PrimaryButton className="w-full" disabled={processing} loading={processing}>
                         Log in
                     </PrimaryButton>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+                    <p className="text-sm text-gray-600">
+                        Don't have an account?{' '}
+                        <Link
+                            href={route('register')}
+                            className="text-indigo-600 hover:text-indigo-800 font-medium"
+                        >
+                            Create an account instead
+                        </Link>
+                    </p>
                 </div>
             </form>
         </GuestLayout>

@@ -17,3 +17,11 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# Kilo Code AI Workspace Files
+.kilo/
+.kilocode/
+.kilocodemodes
+.kilocodeignore
+.kiloconfig
+.kilosession

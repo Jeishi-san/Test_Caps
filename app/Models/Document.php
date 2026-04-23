@@ -49,8 +49,23 @@ class Document extends Model
     {
         return [
             'is_encrypted'       => 'boolean',
+            'is_starred'         => 'boolean',
             'enc_dek_iterations' => 'integer',
         ];
+    }
+
+    protected $appends = [
+        'is_stegoed',
+    ];
+
+    /**
+     * Accessor for frontend compatibility - maps is_encrypted to is_stegoed
+     *
+     * @return bool
+     */
+    public function getIsStegoedAttribute(): bool
+    {
+        return (bool) $this->is_encrypted;
     }
 
     /**

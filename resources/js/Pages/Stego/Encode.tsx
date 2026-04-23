@@ -12,6 +12,8 @@ import {
 import { useCarrierPool } from '@/hooks/useCarrierPool';
 import { usePreflightVerification } from '@/hooks/usePreflightVerification';
 import { useStegoEncode } from '@/hooks/useStegoEncode';
+import PrimaryButton from '@/Components/PrimaryButton';
+import TextInput from '@/Components/TextInput';
 
 interface Document {
     id: number;
@@ -256,7 +258,7 @@ export default function Encode({ auth, documents, systemCarriers = [], errors = 
         <AuthenticatedLayout
             header={
                 <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    🔒 Encode Document
+                    🔒 Lock a File
                 </h2>
             }
         >

@@ -34,7 +34,7 @@ export default function Decode({ auth, stegoDocs, errors = {} }: DecodeProps) {
         <AuthenticatedLayout
             header={
                 <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    🔓 Decode Document
+                    🔓 Unlock a File
                 </h2>
             }
         >

@@ -7,8 +7,30 @@ import DragDropUploadModal from '@/Components/DragDropUploadModal';
 import DocumentPreview from '@/Components/DocumentPreview';
 import PrimaryButton from '@/Components/PrimaryButton';
 import ShareModal from '@/Components/ShareModal';
+import DocumentCard from '@/Components/DocumentCard';
+import PostUnlockDialog from '@/Components/PostUnlockDialog';
 import axios from 'axios';
 import { formatFileSize } from '@/utils/fileSize';
+import {
+  FileText,
+  File,
+  Image as ImageIcon,
+  Film,
+  Music,
+  Archive,
+  Star,
+  MoreVertical,
+  Eye,
+  Download,
+  Share2,
+  Edit3,
+  Trash2,
+  Lock,
+  Loader2,
+  FolderOpen,
+  Info,
+  Unlock
+} from 'lucide-react';
 
 interface DocumentsPageProps extends PageProps {
     documents: DocumentEntity[];
@@ -32,6 +54,9 @@ export default function Index({
     const [showShareModal, setShowShareModal] = useState(false);
     const [documentToShare, setDocumentToShare] = useState<{id: number; name: string} | null>(null);
     const [watchedDocuments, setWatchedDocuments] = useState<number[]>([]);
+    const [processingDocuments, setProcessingDocuments] = useState<Record<number, string>>({});
+    const [showPostUnlockDialog, setShowPostUnlockDialog] = useState(false);
+    const [unlockedDocument, setUnlockedDocument] = useState<DocumentEntity | null>(null);
 
     const handleUploadSuccess = () => {
         router.reload();
@@ -107,6 +132,55 @@ export default function Index({
         }
     };
 
+    const handleUnlock = async (document: DocumentEntity) => {
+        setProcessingDocuments(prev => ({
+            ...prev,
+            [document.id]: 'Decrypting document...'
+        }));
+
+        try {
+            // Poll backend for decryption job status
+            const pollInterval = setInterval(async () => {
+                // For demo - after 3 seconds complete and show post unlock dialog
+                clearInterval(pollInterval);
+                setProcessingDocuments(prev => {
+                    const newState = {...prev};
+                    delete newState[document.id];
+                    return newState;
+                });
+                
+                setUnlockedDocument(document);
+                setShowPostUnlockDialog(true);
+                
+                // Trigger download
+                handleDownload(document);
+            }, 3000);
+
+        } catch (error) {
+            console.error('Failed to unlock document:', error);
+            setProcessingDocuments(prev => {
+                const newState = {...prev};
+                delete newState[document.id];
+                return newState;
+            });
+        }
+    };
+
+    const handleToggleStar = async (documentId: number) => {
+        await axios.post(`/documents/toggle-star`, { document_id: documentId });
+        router.reload();
+    };
+
+    const handleMove = (document: DocumentEntity) => {
+        // Implement move to folder dialog
+        console.log('Move document:', document);
+    };
+
+    const handleInfo = (document: DocumentEntity) => {
+        // Open file info modal
+        handlePreview(document);
+    };
+
     // Load all watched document IDs in one request to avoid N+1 calls.
     useEffect(() => {
         const loadWatchedDocuments = async () => {
@@ -126,24 +200,21 @@ export default function Index({
     }, [documents]);
 
     const getFileIcon = (extension: string) => {
-        const iconMap: Record<string, string> = {
-            pdf: '📄',
-            doc: '📝',
-            docx: '📝',
-            xls: '📊',
-            xlsx: '📊',
-            ppt: '📈',
-            pptx: '📈',
-            jpg: '🖼️',
-            jpeg: '🖼️',
-            png: '🖼️',
-            gif: '🖼️',
-            mp4: '🎥',
-            mp3: '🎵',
-            zip: '🗜️',
-        };
-        return iconMap[extension?.toLowerCase()] || '📎';
+        const ext = extension?.toLowerCase();
+        
+        if (ext === 'pdf') return <FileText className="w-8 h-8 text-red-500" />;
+        if (['doc', 'docx'].includes(ext)) return <FileText className="w-8 h-8 text-blue-600" />;
+        if (['xls', 'xlsx'].includes(ext)) return <FileText className="w-8 h-8 text-green-600" />;
+        if (['ppt', 'pptx'].includes(ext)) return <FileText className="w-8 h-8 text-orange-500" />;
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return <ImageIcon className="w-8 h-8 text-purple-500" />;
+        if (['mp4', 'webm', 'mov'].includes(ext)) return <Film className="w-8 h-8 text-indigo-500" />;
+        if (['mp3', 'wav', 'flac'].includes(ext)) return <Music className="w-8 h-8 text-pink-500" />;
+        if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <Archive className="w-8 h-8 text-amber-600" />;
+        
+        return <File className="w-8 h-8 text-gray-500" />;
     };
+
+    const [hoveredCard, setHoveredCard] = useState<number | null>(null);
 
     return (
         <AuthenticatedLayout
@@ -205,154 +276,25 @@ export default function Index({
                                     </div>
                                 </div>
                             ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-200">
-                                        <thead className="bg-gray-50">
-                                            <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                                                    Document
-                                                </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                                                    Size
-                                                </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                                                    Tags
-                                                </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                                                    Date
-                                                </th>
-                                                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                                                    Actions
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200 bg-white">
-                                            {documents.map((document) => (
-                                                <tr key={document.id} className="hover:bg-gray-50">
-                                                    <td className="whitespace-nowrap px-6 py-4">
-                                                        <div className="flex items-center">
-                                                            <div className="text-2xl mr-3">
-                                                                {getFileIcon(document.extension)}
-                                                            </div>
-                                                            <div>
-                                                                {editingDocument === document.id ? (
-                                                                    <div className="flex items-center gap-2">
-                                                                        <input
-                                                                            type="text"
-                                                                            value={editName}
-                                                                            onChange={(e) => setEditName(e.target.value)}
-                                                                            className="rounded border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                                                        />
-                                                                        <button
-                                                                            onClick={() => handleSaveEdit(document.id)}
-                                                                            className="text-green-600 hover:text-green-800"
-                                                                        >
-                                                                            ✓
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => setEditingDocument(null)}
-                                                                            className="text-red-600 hover:text-red-800"
-                                                                        >
-                                                                            ✗
-                                                                        </button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span className="text-sm font-medium text-gray-900">
-                                                                                {document.name}
-                                                                            </span>
-                                                                            {document.is_stegoed && (
-                                                                                <span
-                                                                                    title="This document has been encoded with StegoLock"
-                                                                                    className="inline-flex items-center rounded-full bg-indigo-100 px-1.5 py-0.5 text-xs font-medium text-indigo-700"
-                                                                                >
-                                                                                    🔒
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="text-xs text-gray-500">
-                                                                            {document.extension?.toUpperCase()}
-                                                                        </div>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                                                        {formatFileSize(document.size)}
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {document.tags?.map((tag) => (
-                                                                <span
-                                                                    key={tag.id}
-                                                                    className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
-                                                                >
-                                                                    {tag.name}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                                                        {document.created_at ? new Date(document.created_at).toLocaleDateString() : 'N/A'}
-                                                    </td>
-                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium">
-                                 <div className="flex items-center justify-end gap-2">
-                                    <button
-                                        onClick={() => handlePreview(document)}
-                                        className="text-indigo-600 hover:text-indigo-900"
-                                        title="Preview"
-                                    >
-                                        👁️
-                                    </button>
-                                    <button
-                                        onClick={() => handleDownload(document)}
-                                        className="text-green-600 hover:text-green-900"
-                                        title="Download"
-                                    >
-                                        ⬇️
-                                    </button>
-                                    <button
-                                        onClick={() => handleShare(document)}
-                                        className="text-blue-600 hover:text-blue-900"
-                                        title="Share"
-                                    >
-                                        📤
-                                    </button>
-                                    <button
-                                        onClick={() => handleEdit(document)}
-                                        className="text-yellow-600 hover:text-yellow-900"
-                                        title="Edit"
-                                    >
-                                        ✏️
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            if (watchedDocuments.includes(document.id)) {
-                                                handleUnwatch(document.id);
-                                            } else {
-                                                handleWatch(document.id);
-                                            }
-                                        }}
-                                        className={watchedDocuments.includes(document.id) ? 'text-orange-600 hover:text-orange-900' : 'text-gray-500 hover:text-gray-700'}
-                                        title={watchedDocuments.includes(document.id) ? 'Unwatch' : 'Watch'}
-                                    >
-                                        {watchedDocuments.includes(document.id) ? '🔔' : '🔕'}
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(document.id, document.name)}
-                                        className="text-red-600 hover:text-red-900"
-                                        title="Delete"
-                                    >
-                                        🗑️
-                                    </button>
-                                </div>
-                            </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                /* Responsive Document Card Grid */
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                                    {documents.map((document) => (
+                                        <DocumentCard
+                                            key={document.id}
+                                            document={document}
+                                            onPreview={handlePreview}
+                                            onUnlock={handleUnlock}
+                                            onShare={handleShare}
+                                            onRename={handleEdit}
+                                            onMove={handleMove}
+                                            onDelete={() => handleDelete(document.id, document.name)}
+                                            onInfo={handleInfo}
+                                            onToggleStar={handleToggleStar}
+                                            isProcessing={!!processingDocuments[document.id]}
+                                            processingStatus={processingDocuments[document.id]}
+                                            isWatched={watchedDocuments.includes(document.id)}
+                                        />
+                                    ))}
                                 </div>
                             )}
                         </div>
@@ -382,6 +324,24 @@ export default function Index({
                     onSuccess={() => {
                         setShowShareModal(false);
                         setDocumentToShare(null);
+                    }}
+                />
+            )}
+
+            {unlockedDocument && (
+                <PostUnlockDialog
+                    show={showPostUnlockDialog}
+                    documentName={unlockedDocument.name}
+                    onClose={() => {
+                        setShowPostUnlockDialog(false);
+                        setUnlockedDocument(null);
+                    }}
+                    onKeepOriginal={async () => {
+                        // Keep original - no action required on backend
+                    }}
+                    onDeleteOriginal={async () => {
+                        await axios.delete(`/documents/${unlockedDocument.id}`);
+                        router.reload();
                     }}
                 />
             )}
