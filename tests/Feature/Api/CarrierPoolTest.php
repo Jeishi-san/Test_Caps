@@ -441,6 +441,59 @@ class CarrierPoolTest extends TestCase
             ->assertJsonPath('valid_carriers', 2);
     }
 
+    #[Test]
+    public function preflight_works_with_wav_carriers(): void
+    {
+        // Skip if Python not available for capacity calculation
+        $pythonPath = config('stegolock.python_path', 'python');
+        if (!shell_exec("which {$pythonPath} 2>/dev/null") && !shell_exec("where {$pythonPath} 2>/dev/null")) {
+            $this->markTestSkipped("Python interpreter not found");
+        }
+
+        $documentBytes = 2000000;
+        $document = $this->createDocumentWithBytes($documentBytes);
+        $requiredBytes = $this->expectedDecodedCiphertextBytes($documentBytes);
+
+        // Create a valid WAV carrier with known capacity
+        // We'll create a real WAV file and use the service to compute capacity
+        $wavData = $this->createValidPcmWav(44100, 1, 16); // ~5236 bytes capacity
+        $wavPath = sys_get_temp_dir() . '/preflight.wav';
+        file_put_contents($wavPath, $wavData);
+
+        // Use StegoService to compute actual capacity (with safety factor)
+        $stego = new \App\Services\Stego\StegoService();
+        $capacity = $stego->capacity($wavPath);
+        $this->assertGreaterThan(0, $capacity, 'WAV capacity must be positive for preflight test');
+
+        // Create carrier record with that capacity
+        $carrier = StegoCarrier::create([
+            'name' => 'preflight-wav',
+            'file_path' => $wavPath,
+            'file_type' => 'wav',
+            'mime_type' => 'audio/wav',
+            'size' => filesize($wavPath),
+            'uploaded_by' => $this->user->id,
+            'validation_status' => 'valid',
+            'capacity_bytes' => $capacity,
+            'is_in_use' => false,
+            'validated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/stego/preflight', [
+                'document_id' => $document->id,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('can_encode', $capacity >= $requiredBytes)
+            ->assertJsonPath('available_bytes', $capacity)
+            ->assertJsonPath('required_bytes', $requiredBytes)
+            ->assertJsonPath('valid_carriers', 1);
+
+        // Cleanup
+        @unlink($wavPath);
+    }
+
     // -------------------------------------------------------------------------
     // Quota enforcement
     // -------------------------------------------------------------------------
@@ -479,5 +532,228 @@ class CarrierPoolTest extends TestCase
 
         $response->assertStatus(422)
             ->assertJsonPath('message', 'Pool storage limit of 500MB would be exceeded.');
+    }
+
+    // -------------------------------------------------------------------------
+    // Audio (WAV) carrier upload
+    // -------------------------------------------------------------------------
+
+    #[Test]
+    public function can_upload_wav_carrier_to_pool(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+
+        // Create a minimal valid PCM WAV file (mono, 16-bit, 1 second)
+        $wavData = $this->createValidPcmWav(44100, 1, 16);
+        $wavPath = sys_get_temp_dir() . '/test-upload.wav';
+        file_put_contents($wavPath, $wavData);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/stego/carriers', [
+                'carrier' => UploadedFile::fromPath($wavPath, 'test.wav', 'audio/wav'),
+                'name' => 'Test WAV Carrier',
+            ]);
+
+        $response->assertStatus(202)
+            ->assertJsonStructure([
+                'message',
+                'carrier_id',
+                'validation_status',
+            ])
+            ->assertJsonPath('validation_status', 'pending');
+
+        // Verify carrier record
+        $this->assertDatabaseHas('stego_carriers', [
+            'name' => 'Test WAV Carrier',
+            'uploaded_by' => $this->user->id,
+            'mime_type' => 'audio/wav',
+            'file_type' => 'wav',
+            'validation_status' => 'pending',
+        ]);
+
+        // Verify validation job dispatched
+        Queue::assertPushed(ValidateCarrierJob::class, function ($job) {
+            return $job->carrierId === StegoCarrier::first()->id;
+        });
+
+        unlink($wavPath);
+    }
+
+    #[Test]
+    public function wav_upload_rejects_non_pcm(): void
+    {
+        // Skip if Python not available for WAV validation
+        $pythonPath = config('stegolock.python_path', 'python');
+        if (!shell_exec("which {$pythonPath} 2>/dev/null") && !shell_exec("where {$pythonPath} 2>/dev/null")) {
+            $this->markTestSkipped("Python interpreter not found");
+        }
+
+        Storage::fake('local');
+
+        // Create a WAV with non-PCM compression (comptype != 'NONE')
+        $wavData = $this->createCompressedWavHeader();
+        $wavPath = sys_get_temp_dir() . '/compressed.wav';
+        file_put_contents($wavPath, $wavData);
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/stego/carriers', [
+                'carrier' => UploadedFile::fromPath($wavPath, 'compressed.wav', 'audio/wav'),
+            ]);
+
+        // Upload accepted (MIME ok), but validation should fail
+        $response->assertStatus(202);
+
+        $carrier = StegoCarrier::first();
+        $this->assertNotNull($carrier);
+
+        $job = new ValidateCarrierJob($carrier->id);
+        $job->handle(app(\App\Services\Stego\StegoService::class));
+
+        $carrier->refresh();
+        $this->assertEquals('invalid', $carrier->validation_status);
+        $this->assertStringContainsString('Compressed WAV not supported', $carrier->validation_error);
+
+        unlink($wavPath);
+    }
+
+    #[Test]
+    public function wav_upload_validates_size_limit(): void
+    {
+        Storage::fake('local');
+
+        // Create a WAV file larger than 200MB limit
+        $largeSize = 200 * 1024 * 1024 + 1; // 200MB + 1 byte
+        $wavPath = sys_get_temp_dir() . '/large.wav';
+        // Write minimal header + padding
+        file_put_contents($wavPath, str_repeat("\x00", $largeSize));
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/stego/carriers', [
+                'carrier' => UploadedFile::fromPath($wavPath, 'large.wav', 'audio/wav'),
+            ]);
+
+        $response->assertStatus(422); // validation fails at upload time
+
+        unlink($wavPath);
+    }
+
+    // -------------------------------------------------------------------------
+    // Text (TXT) carrier upload
+    // -------------------------------------------------------------------------
+
+    #[Test]
+    public function can_upload_txt_carrier_to_pool(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+
+        $txtPath = sys_get_temp_dir() . '/test-upload.txt';
+        file_put_contents($txtPath, "This is a plain text carrier file for steganography.\n");
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/stego/carriers', [
+                'carrier' => UploadedFile::fromPath($txtPath, 'test.txt', 'text/plain'),
+                'name' => 'Test TXT Carrier',
+            ]);
+
+        $response->assertStatus(202)
+            ->assertJsonPath('validation_status', 'pending');
+
+        $this->assertDatabaseHas('stego_carriers', [
+            'name' => 'Test TXT Carrier',
+            'uploaded_by' => $this->user->id,
+            'mime_type' => 'text/plain',
+            'file_type' => 'txt',
+            'validation_status' => 'pending',
+        ]);
+
+        Queue::assertPushed(ValidateCarrierJob::class);
+        unlink($txtPath);
+    }
+
+    #[Test]
+    public function txt_upload_rejects_non_plain_text(): void
+    {
+        Storage::fake('local');
+
+        // Upload a file with .txt extension but non-plain-text MIME (simulate misdetection)
+        // In Laravel's UploadedFile, we can't easily spoof MIME; instead we test the validation rule
+        // by uploading a binary file with .txt extension - the MIME will be detected as application/octet-stream
+        $binaryPath = sys_get_temp_dir() . '/binary.txt';
+        file_put_contents($binaryPath, "\x00\x01\x02\x03\x04"); // binary content
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/stego/carriers', [
+                'carrier' => UploadedFile::fromPath($binaryPath, 'binary.txt', 'application/octet-stream'),
+            ]);
+
+        // MIME not in allowed list → upload rejected
+        $response->assertStatus(422);
+
+        unlink($binaryPath);
+    }
+
+    #[Test]
+    public function txt_upload_validates_size_limit(): void
+    {
+        Storage::fake('local');
+
+        // Create a TXT file larger than 10MB limit
+        $largeSize = 10 * 1024 * 1024 + 1; // 10MB + 1 byte
+        $txtPath = sys_get_temp_dir() . '/large.txt';
+        file_put_contents($txtPath, str_repeat('A', $largeSize));
+
+        $response = $this->actingAs($this->user, 'sanctum')
+            ->postJson('/api/stego/carriers', [
+                'carrier' => UploadedFile::fromPath($txtPath, 'large.txt', 'text/plain'),
+            ]);
+
+        $response->assertStatus(422);
+        unlink($txtPath);
+    }
+
+    // -------------------------------------------------------------------------
+    // Helper: create valid PCM WAV file in memory
+    // -------------------------------------------------------------------------
+
+    private function createValidPcmWav(int $sampleRate, int $channels, int $bitsPerSample): string
+    {
+        $numChannels = $channels;
+        $sampleRate = $sampleRate;
+        $bitsPerSample = $bitsPerSample;
+        $byteRate = $sampleRate * $numChannels * $bitsPerSample / 8;
+        $blockAlign = $numChannels * $bitsPerSample / 8;
+        $dataSize = $sampleRate * $blockAlign; // 1 second of audio
+        $fileSize = 44 + $dataSize;
+
+        $header = pack('N4', 0x46464952, $fileSize, 0x45564157, 0x20746d66); // "RIFF", size, "WAVE", "fmt "
+        $fmt = pack('N2n2N2', 16, 1, $numChannels, $sampleRate, $byteRate, $blockAlign, $bitsPerSample);
+        $dataHeader = pack('N2', 0x61746164, $dataSize);
+        $samples = str_repeat("\x00", $dataSize);
+
+        return $header . $fmt . $dataHeader . $samples;
+    }
+
+    private function createCompressedWavHeader(): string
+    {
+        // Build a WAV header with compression type = 1 (not PCM)
+        $sampleRate = 44100;
+        $channels = 1;
+        $bitsPerSample = 16;
+        $byteRate = $sampleRate * $channels * $bitsPerSample / 8;
+        $blockAlign = $channels * $bitsPerSample / 8;
+        $dataSize = $sampleRate * $blockAlign;
+        $fileSize = 44 + $dataSize;
+
+        $header = pack('N4', 0x46464952, $fileSize, 0x45564157, 0x20746d66);
+        // Format: wFormatTag = 1 (PCM) normally; we'll keep PCM but this test is about non-PCM detection
+        // Actually to test non-PCM we need a different wFormatTag (e.g., 6 for ALAW, 7 for MULAW)
+        // Let's use format tag 7 (μ-law) which is compressed
+        $fmt = pack('N2n2N2', 16, 7, $channels, $sampleRate, $byteRate, $blockAlign, $bitsPerSample);
+        $dataHeader = pack('N2', 0x61746164, $dataSize);
+        $samples = str_repeat("\x00", $dataSize);
+
+        return $header . $fmt . $dataHeader . $samples;
     }
 }

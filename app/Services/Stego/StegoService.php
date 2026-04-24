@@ -61,7 +61,19 @@ class StegoService
                 : $this->embedLSB($carrierPath, $data, $outputPath, $mime);
         }
 
-        return $this->embedAppend($carrierPath, $data, $outputPath);
+        if ($this->isAudio($mime)) {
+            return $this->embedAudio($carrierPath, $data, $outputPath);
+        }
+
+        if ($this->isText($mime)) {
+            return $this->embedAppend($carrierPath, $data, $outputPath);
+        }
+
+        // Anything not explicitly allowed is rejected
+        throw new \RuntimeException(
+            "Unsupported carrier type: {$mime}. Allowed: " .
+            implode(', ', $this->getSupportedMimeTypes())
+        );
     }
 
     /**
@@ -83,7 +95,18 @@ class StegoService
                 : $this->extractLSB($carrierPath);
         }
 
-        return $this->extractAppend($carrierPath);
+        if ($this->isAudio($mime)) {
+            return $this->extractAudio($carrierPath);
+        }
+
+        if ($this->isText($mime)) {
+            return $this->extractAppend($carrierPath);
+        }
+
+        throw new \RuntimeException(
+            "Unsupported carrier type: {$mime}. Allowed: " .
+            implode(', ', $this->getSupportedMimeTypes())
+        );
     }
 
     /**
@@ -131,8 +154,18 @@ class StegoService
                 : $this->capacityPhp($carrierPath, $mime);
         }
 
-        // For append mode there is no hard limit (filesystem permitting).
-        return PHP_INT_MAX;
+        // Audio WAV: 1 bit per sample, header excluded, safety factor applied
+        if ($this->isAudio($mime)) {
+            return $this->capacityWav($carrierPath);
+        }
+
+        // Text TXT: append-mode conservative capacity
+        if ($this->isText($mime)) {
+            return $this->capacityText($carrierPath);
+        }
+
+        // Unknown type: no capacity
+        return 0;
     }
 
     // -------------------------------------------------------------------------
@@ -425,6 +458,90 @@ class StegoService
         return $outputPath;
     }
 
+    // -------------------------------------------------------------------------
+    // Audio (WAV) Embed/Extract via Python
+    // -------------------------------------------------------------------------
+
+    /**
+     * Embed data into a WAV carrier using Python LSB (1 bit per sample).
+     */
+    private function embedAudio(string $carrierPath, string $data, string $outputPath): string
+    {
+        $b64Payload = base64_encode($data);
+
+        $payloadFile = tempnam(sys_get_temp_dir(), 'stego_wav_payload_');
+        file_put_contents($payloadFile, $b64Payload);
+
+        try {
+            $result = $this->runWavScript('embed', [$carrierPath, $payloadFile, $outputPath]);
+            return $result['data'] ?? $outputPath;
+        } finally {
+            if (file_exists($payloadFile)) {
+                @unlink($payloadFile);
+            }
+        }
+    }
+
+    /**
+     * Extract data from a WAV carrier using Python LSB.
+     */
+    private function extractAudio(string $carrierPath): string
+    {
+        $result = $this->runWavScript('extract', [$carrierPath]);
+
+        $decoded = base64_decode($result['data'] ?? '', strict: true);
+        if ($decoded === false) {
+            throw new Exception('Invalid base64 payload from WAV extraction. Carrier may be corrupt.');
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Run the wav_embed.py script and return decoded JSON.
+     */
+    private function runWavScript(string $command, array $args = []): array
+    {
+        $pythonPath = config('stegolock.python_path', 'python');
+        $scriptPath = base_path('python' . DIRECTORY_SEPARATOR . 'wav_embed.py');
+
+        if (!file_exists($scriptPath)) {
+            throw new Exception("WAV stego script not found: {$scriptPath}");
+        }
+
+        $process = new Process(
+            array_merge([$pythonPath, $scriptPath, $command], $args),
+            timeout: (int) config('stegolock.python_timeout', 540)
+        );
+
+        $process->run();
+
+        $output = trim($process->getOutput());
+        $decoded = json_decode($output, associative: true);
+
+        if (!is_array($decoded)) {
+            $lines = preg_split('/\R+/', $output) ?: [];
+            for ($i = count($lines) - 1; $i >= 0; $i--) {
+                $candidate = trim($lines[$i]);
+                if ($candidate === '') continue;
+                $decoded = json_decode($candidate, associative: true);
+                if (is_array($decoded)) break;
+            }
+        }
+
+        if (!is_array($decoded)) {
+            throw new Exception('WAV processing failed: invalid response from Python script');
+        }
+
+        if (empty($decoded['success'])) {
+            $error = $decoded['error'] ?? 'Unknown WAV processing error';
+            $userMessage = $decoded['user_message'] ?? $error;
+            throw new Exception($userMessage);
+        }
+
+        return $decoded;
+    }
+
     /**
      * Extract LSB-embedded data from an image.
      */
@@ -544,6 +661,32 @@ class StegoService
         return in_array($mime, ['image/png', 'image/bmp', 'image/x-bmp', 'image/jpeg', 'image/jpg'], true);
     }
 
+    private function isAudio(string $mime): bool
+    {
+        return in_array($mime, config('stegolock.carriers.allowed.audio.mime_types', ['audio/wav', 'audio/x-wav', 'audio/wave']), true);
+    }
+
+    private function isText(string $mime): bool
+    {
+        return in_array($mime, config('stegolock.carriers.allowed.text.mime_types', ['text/plain']), true);
+    }
+
+    /**
+     * Get list of all supported MIME types from config.
+     * Used for error messages.
+     */
+    private function getSupportedMimeTypes(): array
+    {
+        $allowed = config('stegolock.carriers.allowed', []);
+        $mimes = [];
+        foreach ($allowed as $type => $cfg) {
+            if (isset($cfg['mime_types']) && is_array($cfg['mime_types'])) {
+                $mimes = array_merge($mimes, $cfg['mime_types']);
+            }
+        }
+        return array_unique($mimes);
+    }
+
     private function loadImage(string $path, string $mime): GdImage
     {
         $image = match ($mime) {
@@ -583,6 +726,68 @@ class StegoService
         if (!$ok) {
             throw new Exception("GD could not save image to: {$outputPath}");
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Audio (WAV) Capacity
+    // -------------------------------------------------------------------------
+
+    /**
+     * Calculate WAV capacity: (filesize - 44 bytes header) / 8 bits per byte × 0.95 safety
+     * Supports PCM only. Returns 0 if file too small or invalid.
+     */
+    private function capacityWav(string $carrierPath): int
+    {
+        $result = $this->runWavValidator($carrierPath);
+        return $result['valid'] ? (int)($result['capacity_bytes'] ?? 0) : 0;
+    }
+
+    /**
+     * Run the wav_validator.py script and return decoded JSON.
+     */
+    private function runWavValidator(string $filePath): array
+    {
+        $pythonPath = config('stegolock.python_path', 'python');
+        $scriptPath = base_path('python' . DIRECTORY_SEPARATOR . 'wav_validator.py');
+
+        if (!file_exists($scriptPath)) {
+            return ['valid' => false, 'reason' => 'WAV validator script not found'];
+        }
+
+        $process = new Process(
+            [$pythonPath, $scriptPath, $filePath],
+            timeout: (int) config('stegolock.python_timeout', 60)
+        );
+
+        try {
+            $process->run();
+            $output = trim($process->getOutput());
+            $decoded = json_decode($output, associative: true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+            return ['valid' => false, 'reason' => 'Invalid validator response'];
+        } catch (\Throwable $e) {
+            return ['valid' => false, 'reason' => $e->getMessage()];
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Text (TXT) Capacity
+    // -------------------------------------------------------------------------
+
+    /**
+     * Calculate TXT capacity: conservative 50% of file size for append-mode.
+     */
+    private function capacityText(string $carrierPath): int
+    {
+        $size = filesize($carrierPath);
+        if ($size === false || $size === 0) {
+            return 0;
+        }
+
+        $capacity = (int) ($size * config('stegolock.capacity_safety_factor.text', 0.50));
+        return max(0, $capacity);
     }
 
     // -------------------------------------------------------------------------

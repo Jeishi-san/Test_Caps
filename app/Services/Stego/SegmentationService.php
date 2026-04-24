@@ -204,9 +204,8 @@ class SegmentationService
         $requiredCapacity = $dataLength;
 
         if ($totalCapacity < $requiredCapacity) {
-            throw new \RuntimeException(
-                "Total carrier capacity ({$totalCapacity} bytes) is insufficient for data size ({$dataLength} bytes). Need at least {$requiredCapacity} bytes."
-            );
+            // User-facing message per behavior matrix
+            throw new \RuntimeException('Carrier capacity insufficient. Try a larger carrier.');
         }
 
         $requiredCarriers = $this->recommendedSegmentCount($dataLength, $carrierCapacities);

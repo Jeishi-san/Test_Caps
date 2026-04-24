@@ -220,11 +220,32 @@ class StegoDocumentController extends Controller
 
         $useSystemCarriers = $request->boolean('use_system_carriers');
 
+        $allowed = config('stegolock.carriers.allowed');
+        $allMimes = collect($allowed)->pluck('mimes')->flatten()->implode(',');
+
+        $messages = [
+            'document_id.required' => 'Document ID is required.',
+            'document_id.exists' => 'Selected document not found.',
+            'carriers.*.file' => 'One or more carrier files are invalid.',
+            "carriers.*.mimes" => 'File type not allowed.', // matches contract
+        ];
+
         $request->validate([
             'document_id' => ['required', 'integer', 'exists:documents,id'],
             'carriers'    => ['nullable', 'array'],
-            'carriers.*'  => ['file', 'mimes:png,bmp,jpeg,jpg', 'max:51200'],
-        ]);
+            'carriers.*'  => ['file', "mimes:{$allMimes}"], // max per type enforced below
+        ], $messages);
+
+        // Enforce per-MIME-type max file size for each carrier
+        foreach ($request->file('carriers', []) as $file) {
+            $mime = $file->getMimeType();
+            $maxKb = $this->getMaxKbForMime($mime, $allowed);
+            if ($maxKb && $file->getSize() > $maxKb * 1024) {
+                return response()->json([
+                    'message' => "Carrier file '{$file->getClientOriginalName()}' exceeds maximum size for its type ({$maxKb} KB).",
+                ], 422);
+            }
+        }
 
         $user = Auth::user();
         $document = Document::query()
@@ -916,5 +937,19 @@ class StegoDocumentController extends Controller
         }
 
         return $this->cloudStorage;
+    }
+
+    /**
+     * Determine the maximum allowed file size (in KB) for a given MIME type
+     * based on the stegolock.carriers.allowed config.
+     */
+    private function getMaxKbForMime(string $mime, array $allowedConfig): ?int
+    {
+        foreach ($allowedConfig as $type => $cfg) {
+            if (in_array($mime, $cfg['mime_types'] ?? [], true)) {
+                return $cfg['max_kb'] ?? null;
+            }
+        }
+        return null;
     }
 }

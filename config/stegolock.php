@@ -139,4 +139,69 @@ return [
         'encode_average_psnr_threshold' => (float) env('STEGOLOCK_ENCODE_AVG_PSNR_THRESHOLD', 41.0),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Carrier Type Allowlist (Single Source of Truth)
+    |--------------------------------------------------------------------------
+    |
+    | Defines allowed file extensions, MIME types, max sizes, and safety
+    | factors per carrier category. All validation layers (controller, job,
+    | service) MUST read from this config.
+    |
+    */
+    'carriers' => [
+        'allowed' => [
+            'image' => [
+                'mimes'      => ['png', 'bmp', 'jpeg', 'jpg'],
+                'mime_types' => ['image/png', 'image/bmp', 'image/x-bmp', 'image/jpeg', 'image/jpg'],
+                'max_kb'     => 102400, // 100 MB
+            ],
+            'audio' => [
+                'mimes'      => ['wav'],
+                'mime_types' => ['audio/wav', 'audio/x-wav', 'audio/wave'],
+                'max_kb'     => 204800, // 200 MB
+            ],
+            'text' => [
+                'mimes'      => ['txt'],
+                'mime_types' => ['text/plain'],
+                'max_kb'     => 10240, // 10 MB
+            ],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Capacity Safety Factors
+    |--------------------------------------------------------------------------
+    |
+    | Multiplicative safety buffer applied to raw theoretical capacity.
+    | Prevents overestimation that would cause mid-pipeline failures.
+    |
+    */
+    'capacity_safety_factor' => [
+        'image' => 0.90,  // images already apply 90% inside StegoService::capacity()
+        'audio' => 0.95,  // audio: 5% buffer below theoretical LSB capacity
+        'text'  => 0.50,  // append-mode conservative: half of file size available
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Carrier Mandates (System-Wide)
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, these mandates force carrier selection to include at
+    | least one carrier of each enabled type. Mandates are satisfied first,
+    | then greedy fill covers remaining capacity. System carriers can be
+    | used to fulfill mandates if user pool lacks a required type.
+    |
+    */
+    'carrier_mandates' => [
+        'enabled'       => env('STEGO_MANDATES_ENABLED', false),
+        'require_image' => env('STEGO_REQUIRE_IMAGE', true),   // always require an image carrier
+        'require_audio' => env('STEGO_REQUIRE_AUDIO', false),  // optional audio carrier
+        'require_text'  => env('STEGO_REQUIRE_TEXT', false),   // optional text carrier
+    ],
+
+];
+
 ];

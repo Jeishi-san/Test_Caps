@@ -267,7 +267,7 @@ class SegmentationServiceTest extends TestCase
     public function split_throws_when_not_enough_carriers(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageMatches('/Total carrier capacity.*insufficient/i');
+        $this->expectExceptionMessage('Carrier capacity insufficient. Try a larger carrier.');
 
         $raw        = str_repeat('d', 5 * 1024 * 1024);   // needs 3 carriers
         $base64     = base64_encode($raw);
@@ -280,7 +280,7 @@ class SegmentationServiceTest extends TestCase
     public function split_throws_when_carrier_is_too_small_for_its_chunk(): void
     {
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessageMatches('/Total carrier capacity.*insufficient/i');
+        $this->expectExceptionMessage('Carrier capacity insufficient. Try a larger carrier.');
 
         $raw        = str_repeat('e', 3 * 1024 * 1024);
         $base64     = base64_encode($raw);

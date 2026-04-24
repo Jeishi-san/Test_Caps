@@ -11,6 +11,8 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Process\Process;
+use Symfony\Component\Process\Exception\ProcessFailedException;
 use Throwable;
 
 /**
@@ -59,21 +61,37 @@ class ValidateCarrierJob implements ShouldQueue
                 return;
             }
 
-            // Measure capacity
+            $mime = $carrier->mime_type ?? '';
+
+            // Audio (WAV) validation: run wav_validator.py
+            if (str_starts_with($mime, 'audio/')) {
+                $this->validateAudioCarrier($carrier, $filePath);
+                return;
+            }
+
+            // Text (TXT) validation: simple readability and non-empty check
+            if (str_starts_with($mime, 'text/')) {
+                $this->validateTextCarrier($carrier, $filePath);
+                return;
+            }
+
+            // Image validation: capacity + PSNR
             $capacity = $stegoService->capacity($filePath);
             $carrier->capacity_bytes = $capacity;
 
-            // For images, measure PSNR baseline
-            if (str_starts_with($carrier->mime_type ?? '', 'image/')) {
-                $psnrResult = $this->measureBaselinePsnr($stegoService, $filePath);
+            if ($capacity <= 0) {
+                $this->markInvalid($carrier, "Carrier capacity is zero or insufficient");
+                return;
+            }
 
-                if ($psnrResult !== null) {
-                    $carrier->psnr = $psnrResult;
+            $psnrResult = $this->measureBaselinePsnr($stegoService, $filePath);
 
-                    if ($psnrResult < 40.0) {
-                        $this->markInvalid($carrier, "PSNR {$psnrResult} dB is below the 40 dB threshold");
-                        return;
-                    }
+            if ($psnrResult !== null) {
+                $carrier->psnr = $psnrResult;
+
+                if ($psnrResult < 40.0) {
+                    $this->markInvalid($carrier, "PSNR {$psnrResult} dB is below the 40 dB threshold");
+                    return;
                 }
             }
 
@@ -137,6 +155,141 @@ class ValidateCarrierJob implements ShouldQueue
         Log::info('ValidateCarrierJob: Carrier marked as invalid', [
             'carrier_id' => $carrier->id,
             'reason' => $reason,
+        ]);
+    }
+
+    /**
+     * Validate an audio (WAV) carrier using wav_validator.py.
+     * Maps technical errors to user-friendly messages per behavior matrix.
+     */
+    private function validateAudioCarrier(StegoCarrier $carrier, string $filePath): void
+    {
+        $pythonPath = config('stegolock.python_path', 'python');
+        $scriptPath = base_path('python' . DIRECTORY_SEPARATOR . 'wav_validator.py');
+
+        if (!file_exists($scriptPath)) {
+            $this->markInvalid($carrier, 'Unsupported audio format: WAV validation service unavailable.');
+            return;
+        }
+
+        $process = new Process(
+            [$pythonPath, $scriptPath, $filePath],
+            timeout: (int) config('stegolock.python_timeout', 60)
+        );
+
+        try {
+            $process->run();
+            $output = trim($process->getOutput());
+            $result = json_decode($output, associative: true);
+
+            if (!is_array($result)) {
+                $this->markInvalid($carrier, 'Unsupported audio format: unable to parse validation response.');
+                return;
+            }
+
+            if (empty($result['valid'])) {
+                $technicalReason = $result['reason'] ?? 'Unknown WAV validation error';
+                $userMessage = $this->mapWavValidationError($technicalReason);
+                $this->markInvalid($carrier, $userMessage);
+                Log::info('ValidateCarrierJob: WAV validation failed', [
+                    'carrier_id' => $carrier->id,
+                    'technical_reason' => $technicalReason,
+                    'user_message' => $userMessage,
+                ]);
+                return;
+            }
+
+            // Valid WAV — set capacity from validator (already includes safety factor)
+            $carrier->capacity_bytes = (int) ($result['capacity_bytes'] ?? 0);
+            $carrier->validation_status = 'valid';
+            $carrier->validated_at = now();
+            $carrier->save();
+
+            Log::info('ValidateCarrierJob: WAV carrier validated', [
+                'carrier_id' => $carrier->id,
+                'capacity_bytes' => $carrier->capacity_bytes,
+                'sample_width' => $result['sample_width'] ?? null,
+                'channels' => $result['channels'] ?? null,
+                'nframes' => $result['nframes'] ?? null,
+            ]);
+
+        } catch (ProcessFailedException $e) {
+            $this->markInvalid($carrier, 'Unsupported audio format: WAV processing failed.');
+        } catch (\Throwable $e) {
+            $this->markInvalid($carrier, 'Unsupported audio format: Unable to validate WAV file.');
+        }
+    }
+
+    /**
+     * Map technical WAV validation errors to user-friendly messages.
+     * Per behavior matrix error contract.
+     */
+    private function mapWavValidationError(string $technicalReason): string
+    {
+        $reasonLower = strtolower($technicalReason);
+
+        if (str_contains($reasonLower, 'non-pcm') || str_contains($reasonLower, 'compression')) {
+            return 'Compressed WAV not supported. Use PCM uncompressed WAV.';
+        }
+
+        if (str_contains($reasonLower, 'no audio frames') || str_contains($reasonLower, 'nframes=0') || str_contains($reasonLower, 'contains no audio')) {
+            return 'Audio file contains no audio data.';
+        }
+
+        if (str_contains($reasonLower, 'invalid wav') || str_contains($reasonLower, 'malformed') || str_contains($reasonLower, 'structure')) {
+            return 'Unsupported audio format: WAV file is malformed.';
+        }
+
+        if (str_contains($reasonLower, 'unsupported sample width') || str_contains($reasonLower, 'sample width')) {
+            return 'Unsupported audio format: WAV file uses unsupported sample format. Use 8-bit or 16-bit PCM.';
+        }
+
+        if (str_contains($reasonLower, 'too many channels') || str_contains($reasonLower, 'channels')) {
+            return 'Unsupported audio format: WAV file has too many channels. Use mono or stereo.';
+        }
+
+        // Generic fallback
+        return 'Unsupported audio format. Please upload a valid PCM WAV file.';
+    }
+
+    /**
+     * Validate a text (TXT) carrier: readable and non-empty.
+     */
+    private function validateTextCarrier(StegoCarrier $carrier, string $filePath): void
+    {
+        if (!is_readable($filePath)) {
+            $this->markInvalid($carrier, 'Text carrier could not be read (permission denied)');
+            return;
+        }
+
+        $content = @file_get_contents($filePath);
+        if ($content === false) {
+            $this->markInvalid($carrier, 'Text carrier could not be read (read error)');
+            return;
+        }
+
+        $size = strlen($content);
+        if ($size === 0) {
+            $this->markInvalid($carrier, 'Text carrier is empty');
+            return;
+        }
+
+        // Capacity is conservative 50% of file size
+        $carrier->capacity_bytes = (int) ($size * 0.5);
+
+        if ($carrier->capacity_bytes <= 0) {
+            $this->markInvalid($carrier, 'Text carrier capacity is too low (file too small)');
+            return;
+        }
+
+        $carrier->validation_status = 'valid';
+        $carrier->validated_at = now();
+        $carrier->save();
+
+        Log::info('ValidateCarrierJob: Text carrier validated', [
+            'carrier_id' => $carrier->id,
+            'capacity_bytes' => $carrier->capacity_bytes,
+            'file_size' => $size,
         ]);
     }
 }

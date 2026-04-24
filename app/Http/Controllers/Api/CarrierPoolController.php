@@ -34,13 +34,32 @@ class CarrierPoolController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $allowed = config('stegolock.carriers.allowed');
+        $allMimes = collect($allowed)->pluck('mimes')->flatten()->implode(',');
+
+        // Custom validation messages per behavior matrix
+        $messages = [
+            'carrier.required' => 'Carrier file is required.',
+            'carrier.file' => 'Invalid file upload.',
+            "carrier.mimes" => 'File type not allowed.', // matches contract
+        ];
+
         $request->validate([
-            'carrier' => ['required', 'file', 'mimes:png,bmp,jpeg,jpg', 'max:102400'],
+            'carrier' => ['required', 'file', "mimes:{$allMimes}"],
             'name' => ['nullable', 'string', 'max:255'],
-        ]);
+        ], $messages);
 
         $user = Auth::user();
         $file = $request->file('carrier');
+
+        // Enforce per-MIME-type max file size from config
+        $mime = $file->getMimeType();
+        $maxKb = $this->getMaxKbForMime($mime, $allowed);
+        if ($maxKb && $file->getSize() > $maxKb * 1024) {
+            return response()->json([
+                'message' => 'File size exceeds maximum allowed for this file type.',
+            ], 422);
+        }
 
         // Enforce quota before storing
         $maxCarriers = config('stegolock.carrier_pool.max_carriers_per_user', 50);
@@ -84,6 +103,24 @@ class CarrierPoolController extends Controller
             'validation_status' => 'pending',
             'message' => 'Carrier queued for validation. Check status before encoding.',
         ], 202);
+    }
+
+    /**
+     * Determine the maximum allowed file size (in KB) for a given MIME type
+     * based on the stegolock.carriers.allowed config.
+     *
+     * @param string $mime
+     * @param array $allowedConfig
+     * @return int|null Max KB or null if MIME not found
+     */
+    private function getMaxKbForMime(string $mime, array $allowedConfig): ?int
+    {
+        foreach ($allowedConfig as $type => $cfg) {
+            if (in_array($mime, $cfg['mime_types'] ?? [], true)) {
+                return $cfg['max_kb'] ?? null;
+            }
+        }
+        return null;
     }
 
     /**
