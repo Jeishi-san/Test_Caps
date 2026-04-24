@@ -196,12 +196,9 @@ return [
     |
     */
     'carrier_mandates' => [
-        'enabled'       => env('STEGO_MANDATES_ENABLED', false),
-        'require_image' => env('STEGO_REQUIRE_IMAGE', true),   // always require an image carrier
-        'require_audio' => env('STEGO_REQUIRE_AUDIO', false),  // optional audio carrier
-        'require_text'  => env('STEGO_REQUIRE_TEXT', false),   // optional text carrier
+        'enabled'               => env('STEGO_MANDATES_ENABLED', false),
+        'minimum_diverse_types' => env('STEGO_MINIMUM_DIVERSE_TYPES', 1),  // at least N different types (1-3)
+        'minimum_carriers'      => env('STEGO_MINIMUM_CARRIERS', 1),       // at least M total carriers
     ],
 
-];
-
-];
+    ];

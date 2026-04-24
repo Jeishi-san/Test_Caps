@@ -116,8 +116,8 @@ class CarrierPoolSelector
         }
 
         // Order by capacity DESC, id ASC for deterministic tie-breaking
-        $carriers = $query->orderByDesc('capacity_bytes')
-            ->orderByAsc('id')
+        $carriers = $query->orderBy('capacity_bytes', 'desc')
+            ->orderBy('id', 'asc')
             ->lockForUpdate()
             ->get();
 
@@ -147,64 +147,30 @@ class CarrierPoolSelector
     private function selectWithMandates(int $userId, int $requiredBytes, bool $allowSystemFallback): Collection
     {
         $mandates = config('stegolock.carrier_mandates', []);
-        $requireImage = $mandates['require_image'] ?? false;
-        $requireAudio = $mandates['require_audio'] ?? false;
-        $requireText  = $mandates['require_text']  ?? false;
+        $minDiverseTypes = (int) ($mandates['minimum_diverse_types'] ?? 1);
+        $minCarriers = (int) ($mandates['minimum_carriers'] ?? 1);
 
-        $requiredTypes = [];
-        if ($requireImage) $requiredTypes[] = 'image';
-        if ($requireAudio) $requiredTypes[] = 'audio';
-        if ($requireText)  $requiredTypes[] = 'text';
-
-        // If no types required (all false), fall back to greedy
-        if (empty($requiredTypes)) {
-            return $this->select($userId, $requiredBytes, $allowSystemFallback);
-        }
+        // Validate config bounds
+        if ($minDiverseTypes < 1) $minDiverseTypes = 1;
+        if ($minDiverseTypes > 3) $minDiverseTypes = 3; // max 3 types exist
+        if ($minCarriers < 1) $minCarriers = 1;
 
         $selected = collect();
         $remainingBytes = $requiredBytes;
         $usedCarrierIds = [];
+        $selectedTypes = [];
 
-        // Step 1: Satisfy each mandated type with best carrier from user pool, else system pool
-        foreach ($requiredTypes as $type) {
-            // Try user pool first
-            $userCarrier = $this->findBestCarrier($userId, $type);
-            if ($userCarrier) {
-                $selected->push($userCarrier);
-                $usedCarrierIds[] = $userCarrier->id;
-                $remainingBytes -= $userCarrier->capacity_bytes;
-                continue;
-            }
-
-            // Fallback to system pool if allowed
-            if ($allowSystemFallback) {
-                $systemUserId = $this->getSystemUserId();
-                $systemCarrier = $this->findBestCarrier($systemUserId, $type);
-                if ($systemCarrier) {
-                    $selected->push($systemCarrier);
-                    $usedCarrierIds[] = $systemCarrier->id;
-                    $remainingBytes -= $systemCarrier->capacity_bytes;
-                    Log::info('CarrierPoolSelector: Mandate satisfied by system carrier', [
-                        'type' => $type,
-                        'carrier_id' => $systemCarrier->id,
-                    ]);
-                    continue;
-                }
-            }
-
-            // Mandate cannot be satisfied
-            $ext = collect(config("stegolock.carriers.allowed.{$type}.mimes", []))->first();
-            $extMsg = $ext ? "Upload a .{$ext} file" : "Upload a compatible carrier";
-            throw new \RuntimeException(
-                "Cannot encode: no {$type} carrier available. {$extMsg} or contact support."
-            );
+        // STEP A: Satisfy minimum diverse types requirement
+        if ($minDiverseTypes > 0) {
+            $this->satisfyDiverseTypes($minDiverseTypes, $userId, $allowSystemFallback, $selected, $selectedTypes, $usedCarrierIds, $remainingBytes);
         }
 
-        // Step 2: Greedy fill remaining bytes with best carriers from all types (excluding used)
+        // STEP B: Greedy fill remaining capacity (capacity-aware, minimizes carrier count)
         if ($remainingBytes > 0) {
             $greedyCarriers = $this->queryGreedyCarriers($userId, $remainingBytes, $usedCarrierIds, $allowSystemFallback);
             foreach ($greedyCarriers as $carrier) {
                 $selected->push($carrier);
+                $usedCarrierIds[] = $carrier->id;
                 $remainingBytes -= $carrier->capacity_bytes;
                 if ($remainingBytes <= 0) {
                     break;
@@ -212,11 +178,18 @@ class CarrierPoolSelector
             }
         }
 
-        // Final check: did we gather enough capacity?
+        // STEP C: Only add more carriers if greedy selection produced fewer than minimum_carriers
+        // This is rare — only when payload is tiny and greedy picked very few carriers
+        if ($selected->count() < $minCarriers) {
+            $this->satisfyMinimumCarriers($minCarriers, $userId, $allowSystemFallback, $selected, $usedCarrierIds, $remainingBytes);
+        }
+
+        // Final capacity validation
         if ($remainingBytes > 0) {
+            $selectedBytes = $requiredBytes - $remainingBytes;
             throw new \RuntimeException(
                 "Insufficient capacity after mandate selection. " .
-                "Need {$requiredBytes} bytes, selected " . ($requiredBytes - $remainingBytes) . " bytes. " .
+                "Need {$requiredBytes} bytes, selected {$selectedBytes} bytes. " .
                 "Upload more carriers."
             );
         }
@@ -224,8 +197,10 @@ class CarrierPoolSelector
         Log::info('CarrierPoolSelector: Mandate-aware selection completed', [
             'user_id' => $userId,
             'selected_count' => $selected->count(),
-            'mandates' => $requiredTypes,
-            'initial_remaining' => $requiredBytes,
+            'selected_types' => $selectedTypes,
+            'min_diverse_types' => $minDiverseTypes,
+            'min_carriers' => $minCarriers,
+            'required_bytes' => $requiredBytes,
             'final_remaining' => $remainingBytes,
         ]);
 
@@ -252,12 +227,166 @@ class CarrierPoolSelector
             ->whereNotNull('capacity_bytes')
             ->where('capacity_bytes', '>', 0)
             ->whereIn('mime_type', $allowedMimes)
-            ->orderByDesc('capacity_bytes')
-            ->orderByAsc('id')  // deterministic tie-breaking
+            ->orderBy('capacity_bytes', 'desc')
+            ->orderBy('id', 'asc')  // deterministic tie-breaking
             ->lockForUpdate()
             ->first();
 
         return $carrier;
+    }
+
+    /**
+     * Satisfy minimum diverse types requirement.
+     * Selects the largest carrier of each type until minimum_diverse_types is reached.
+     *
+     * @param int $minDiverseTypes Minimum number of different carrier types required
+     * @param int $userId User ID
+     * @param bool $allowSystemFallback Whether to use system carriers as fallback
+     * @param Collection $selected Collection to add carriers to (by reference)
+     * @param array $selectedTypes Array of selected type names (by reference)
+     * @param array $usedIds Array of used carrier IDs (by reference)
+     * @param int $remainingBytes Remaining bytes needed (by reference, will be reduced)
+     * @throws \RuntimeException If diverse types requirement cannot be satisfied
+     */
+    private function satisfyDiverseTypes(int $minDiverseTypes, int $userId, bool $allowSystemFallback,
+        Collection &$selected, array &$selectedTypes, array &$usedIds, int &$remainingBytes): void
+    {
+        $types = ['image', 'audio', 'text'];
+        $candidates = [];
+
+        // Get best carrier per type from user pool
+        foreach ($types as $type) {
+            $carrier = $this->findBestCarrier($userId, $type);
+            if ($carrier) {
+                $candidates[$type] = $carrier;
+            }
+        }
+
+        // Sort candidates by capacity descending to pick largest first
+        uasort($candidates, function ($a, $b) {
+            return $b->capacity_bytes <=> $a->capacity_bytes;
+        });
+
+        // Select top N diverse types from user pool
+        foreach ($candidates as $type => $carrier) {
+            if (count($selectedTypes) >= $minDiverseTypes) {
+                break;
+            }
+            $selected->push($carrier);
+            $usedIds[] = $carrier->id;
+            $selectedTypes[] = $type;
+            $remainingBytes -= $carrier->capacity_bytes;
+        }
+
+        // Fallback to system pool if still insufficient
+        if (count($selectedTypes) < $minDiverseTypes && $allowSystemFallback) {
+            $systemUserId = $this->getSystemUserId();
+            foreach ($types as $type) {
+                if (in_array($type, $selectedTypes)) {
+                    continue;
+                }
+                $carrier = $this->findBestCarrier($systemUserId, $type);
+                if ($carrier) {
+                    $selected->push($carrier);
+                    $usedIds[] = $carrier->id;
+                    $selectedTypes[] = $type;
+                    $remainingBytes -= $carrier->capacity_bytes;
+                    if (count($selectedTypes) >= $minDiverseTypes) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Validate: did we get enough diverse types?
+        if (count($selectedTypes) < $minDiverseTypes) {
+            $available = empty($selectedTypes) ? 'none' : implode(', ', $selectedTypes);
+            throw new \RuntimeException(
+                "Mandate requires at least {$minDiverseTypes} different carrier types (image/audio/text). " .
+                "Only " . count($selectedTypes) . " type(s) available: {$available}. " .
+                "Upload carriers of different types."
+            );
+        }
+    }
+
+    /**
+     * Satisfy minimum total carriers requirement.
+     * Adds more carriers (any type) until minimum_carriers is reached.
+     *
+     * @param int $minCarriers Minimum total carriers required
+     * @param int $userId User ID
+     * @param bool $allowSystemFallback Whether to use system carriers as fallback
+     * @param Collection $selected Collection to add carriers to (by reference)
+     * @param array $usedIds Array of used carrier IDs (by reference)
+     * @param int $remainingBytes Remaining bytes needed (by reference, will be reduced)
+     * @throws \RuntimeException If minimum carriers requirement cannot be satisfied
+     */
+    private function satisfyMinimumCarriers(int $minCarriers, int $userId, bool $allowSystemFallback,
+        Collection &$selected, array &$usedIds, int &$remainingBytes): void
+    {
+        $currentCount = $selected->count();
+        if ($currentCount >= $minCarriers) {
+            return; // Already satisfied
+        }
+
+        $needed = $minCarriers - $currentCount;
+        $added = 0;
+
+        // Try user carriers first (excluding already used)
+        $userCarriers = StegoCarrier::where('uploaded_by', $userId)
+            ->where('validation_status', 'valid')
+            ->where('is_in_use', false)
+            ->whereNotNull('capacity_bytes')
+            ->where('capacity_bytes', '>', 0)
+            ->whereNotIn('id', $usedIds)
+            ->orderBy('capacity_bytes', 'desc')
+            ->orderBy('id', 'asc')
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($userCarriers as $carrier) {
+            if ($added >= $needed) {
+                break;
+            }
+            $selected->push($carrier);
+            $usedIds[] = $carrier->id;
+            $remainingBytes -= $carrier->capacity_bytes;
+            $added++;
+        }
+
+        // If still need more and system fallback allowed
+        if ($added < $needed && $allowSystemFallback) {
+            $systemUserId = $this->getSystemUserId();
+            $systemCarriers = StegoCarrier::where('uploaded_by', $systemUserId)
+                ->where('validation_status', 'valid')
+                ->where('is_in_use', false)
+                ->whereNotNull('capacity_bytes')
+                ->where('capacity_bytes', '>', 0)
+                ->whereNotIn('id', $usedIds)
+                ->orderBy('capacity_bytes', 'desc')
+                ->orderBy('id', 'asc')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($systemCarriers as $carrier) {
+                if ($added >= $needed) {
+                    break;
+                }
+                $selected->push($carrier);
+                $usedIds[] = $carrier->id;
+                $remainingBytes -= $carrier->capacity_bytes;
+                $added++;
+            }
+        }
+
+        $totalNow = $selected->count();
+        if ($totalNow < $minCarriers) {
+            throw new \RuntimeException(
+                "Mandate requires at least {$minCarriers} total carriers. " .
+                "Only {$totalNow} carrier(s) available after diversity requirement. " .
+                "Upload more carriers."
+            );
+        }
     }
 
     /**
@@ -282,8 +411,8 @@ class CarrierPoolSelector
             $userQuery->whereNotIn('id', $excludeIds);
         }
 
-        $userCarriers = $userQuery->orderByDesc('capacity_bytes')
-            ->orderByAsc('id')
+        $userCarriers = $userQuery->orderBy('capacity_bytes', 'desc')
+            ->orderBy('id', 'asc')
             ->lockForUpdate()
             ->get();
 
@@ -313,8 +442,8 @@ class CarrierPoolSelector
                 $systemQuery->whereNotIn('id', $systemExclude);
             }
 
-            $systemCarriers = $systemQuery->orderByDesc('capacity_bytes')
-                ->orderByAsc('id')
+            $systemCarriers = $systemQuery->orderBy('capacity_bytes', 'desc')
+                ->orderBy('id', 'asc')
                 ->lockForUpdate()
                 ->get();
 
