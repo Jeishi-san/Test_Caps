@@ -1,257 +1,110 @@
-Yes, and this is actually the correct architecture. Right now the flow assumes each segment must fit entirely within one carrier. The fix is to let the segmentation layer decide chunk sizes based on actual carrier capacities, then assign one chunk per carrier — no carrier is over-allocated and no space is wasted.
+Based on my analysis, moving carrier files to cloud storage is **moderately easy (2-3 days of work)** because significant cloud infrastructure already exists. Here's the detailed breakdown:
 
-The Core Change
-Currently:
-ciphertext → split into N equal chunks → assign one chunk to one carrier
-             ↑ chunk size is fixed, carrier capacity is ignored until it fails
-After this fix:
-ciphertext → measure all carrier capacities → split chunks sized to fit each carrier
-             ↑ chunk size is determined BY the carrier, not before
+---
 
-Step 1 — Smart Carrier Selection with capacity-aware bin packing
-The selector sorts carriers largest-first and assigns each one exactly as much data as it can hold — no more, no less.
-php// app/Services/Stego/CarrierPoolSelector.php
+## **Current State**
 
-public function select(int $userId, int $requiredBytes): Collection
-{
-    $carriers = StegCarrier::where('uploaded_by', $userId)
-        ->where('validation_status', 'valid')
-        ->where('is_in_use', false)
-        ->whereNotNull('capacity_bytes')
-        ->orderByDesc('capacity_bytes')   // largest carriers first
-        ->lockForUpdate()
-        ->get();
+**Carrier files are stored locally:**
+- [`CarrierPoolController@store()`](app/Http/Controllers/Api/CarrierPoolController.php:85) uses `Storage::putFile('stego/carriers/' . $user->id, $file)` → `storage/app/stego/carriers/{userId}/`
+- [`ValidateCarrierJob`](app/Jobs/ValidateCarrierJob.php:57) uses `Storage::path()` to get absolute local path for validation
+- `file_path` stores relative paths like `stego/carriers/1/abc123.png`
 
-    // Walk carriers greedily until we have enough total capacity
-    $selected    = collect();
-    $accumulated = 0;
+**Cloud infrastructure already exists:**
+- [`CloudStorageService`](app/Services/Stego/CloudStorageService.php:31) wraps `Storage::disk($diskName)` with configurable disk
+- Config: `stegolock.storage.disk` (defaults to `'local'`) — see [`config/stegolock.php`](config/stegolock.php:33-35)
+- Already used for **stego-encoded carriers** in [`StegoDocumentService`](app/Services/Stego/StegoDocumentService.php:255-256) — uploads to S3/B2
+- [`DownloadController`](app/Http/Controllers/DownloadController.php:52-57) handles both local streaming and cloud signed URL redirects
 
-    foreach ($carriers as $carrier) {
-        if ($accumulated >= $requiredBytes) break;
+---
 
-        $selected->push($carrier);
-        $accumulated += $carrier->capacity_bytes;
-    }
+## **Required Changes**
 
-    if ($accumulated < $requiredBytes) {
-        $shortfallKb    = round(($requiredBytes - $accumulated) / 1024);
-        $approxNeeded   = ceil(($requiredBytes - $accumulated) / 750_000);
+### **1. Carrier upload** (1 hour)
+[`CarrierPoolController@store()`](app/Http/Controllers/Api/CarrierPoolController.php:85):
+```php
+$disk = config('stegolock.storage.disk', 'local');
+$path = Storage::disk($disk)->putFile('stego/carriers/' . $user->id, $file);
+```
 
-        throw new InsufficientCarrierPoolException(
-            "Pool is {$shortfallKb}KB short. " .
-            "Upload approximately {$approxNeeded} more high-resolution image(s)."
-        );
-    }
+### **2. ValidateCarrierJob** (3-4 hours) ⚠️ **Critical**
+[`ValidateCarrierJob`](app/Jobs/ValidateCarrierJob.php:57) uses `Storage::path()` — **only works for local disk**. Must download cloud files to temp:
 
-    return $selected;
-}
+```php
+$disk = Storage::disk(config('stegolock.storage.disk', 'local'));
+$content = $disk->get($carrier->file_path);
+if ($content === null) { /* error */ }
 
-Step 2 — Segmentation splits by carrier capacity, not equal chunks
-This is the key change. Instead of splitting into equal pieces, each chunk is sized to exactly fill its assigned carrier — and the last carrier only gets whatever remains.
-php// app/Services/Stego/SegmentationService.php
+$tmpPath = tempnam(sys_get_temp_dir(), 'carrier_') . '.' . $carrier->file_type;
+file_put_contents($tmpPath, $content);
+// ... validate using $tmpPath ...
+@unlink($tmpPath);
+```
 
-/**
- * Split ciphertext into chunks sized to match each carrier's capacity.
- * Carriers must be sorted largest-first before calling this.
- * Returns: array of ['chunk' => string, 'carrier' => StegCarrier]
- */
-public function splitByCapacity(string $base64Ciphertext, Collection $carriers): array
-{
-    $raw        = base64_decode($base64Ciphertext, true);
-    $dataLength = strlen($raw);
-    $offset     = 0;
-    $segments   = [];
+### **3. Carrier deletion** (30 min)
+[`CarrierPoolController@destroy()`](app/Http/Controllers/Api/CarrierPoolController.php:168):
+```php
+Storage::disk(config('stegolock.storage.disk', 'local'))->delete($carrier->file_path);
+```
 
-    foreach ($carriers as $carrier) {
-        if ($offset >= $dataLength) break;
+### **4. Carrier preview/download** (2-3 hours, if endpoints exist)
+- Local: `response()->file(Storage::path($path))`
+- Cloud: `redirect(Storage::disk('s3')->temporaryUrl($path, now()->addMinutes(15)))`
 
-        // Give this carrier exactly as much as it can hold,
-        // or whatever remains — whichever is smaller
-        $chunkSize = min($carrier->capacity_bytes, $dataLength - $offset);
-        $chunk     = substr($raw, $offset, $chunkSize);
+### **5. Migration script** (1-2 hours, optional)
+One-time upload of existing `storage/app/stego/carriers/` files to cloud.
 
-        $segments[] = [
-            'chunk'   => base64_encode($chunk),
-            'carrier' => $carrier,
-        ];
+---
 
-        $offset += $chunkSize;
-    }
+## **Configuration**
 
-    if ($offset < $dataLength) {
-        throw new RuntimeException(
-            "Segmentation failed: carriers cannot hold the full ciphertext."
-        );
-    }
+Already in [`config/stegolock.php`](config/stegolock.php:33-35):
+```php
+'storage' => ['disk' => env('STEGOLOCK_STORAGE_DISK', 'local')],
+```
 
-    return $segments;
-}
+Set `.env`:
+```
+STEGOLOCK_STORAGE_DISK=s3
+```
 
-Step 3 — Update StegoDocumentService::encode() to wire it together
-php// app/Services/Stego/StegoDocumentService.php
+---
 
-public function encode(int $userId, int $documentId): StegDocument
-{
-    return DB::transaction(function () use ($userId, $documentId) {
+## **Risk Assessment**
 
-        $document        = Document::findOrFail($documentId);
-        $plaintext       = $this->storage->get($document->file_path);
-        $encrypted       = $this->crypto->encrypt($plaintext);
-        $ciphertextBytes = strlen(base64_decode($encrypted['ciphertext']));
+| Area | Risk | Notes |
+|------|------|-------|
+| **ValidateCarrierJob** | **High** | Needs temp file for Python tools (PSNR, wav_validator) |
+| Carrier upload | Low | `disk()->putFile()` works identically |
+| Carrier delete | Low | `disk()->delete()` is disk-agnostic |
+| Existing data | Low | Can keep local; new uploads go to cloud; mixed operation fine |
+| Tests | Low | Unit tests mock storage; integration may need cloud config |
 
-        // 1. Select minimum carriers needed, sorted largest-first
-        $carriers = $this->poolSelector->select($userId, $ciphertextBytes);
-        $this->poolSelector->markInUse($carriers);
+---
 
-        $stegoDoc = StegDocument::create([
-            'document_id'       => $documentId,
-            'user_id'           => $userId,
-            'status'            => 'pending',
-            'ciphertext'        => $encrypted['ciphertext'],
-            'stego_iv'          => $encrypted['iv'],
-            'stego_auth_tag'    => $encrypted['auth_tag'],
-            'stego_hash_sha256' => $encrypted['hash'],
-            'stego_dek_salt'    => $encrypted['dek_salt'],
-            'stego_dek_iter'    => $encrypted['dek_iter'],
-            'compressed'        => $encrypted['compressed'],
-            'compression_algorithm' => $encrypted['compression_algorithm'],
-        ]);
+## **Estimated Effort**
 
-        try {
-            // 2. Split ciphertext into chunks sized to each carrier's capacity
-            $segments = $this->segmentation->splitByCapacity(
-                $encrypted['ciphertext'],
-                $carriers
-            );
+- Core migration (upload + validation + delete): **1 day**
+- Preview/download endpoints: **+0.5 day**
+- Migration script: **+0.5 day**
+- Testing: **0.5 day**
 
-            // 3. Dispatch one embed job per segment — all run in parallel
-            $jobs = array_map(function ($segment, $index) use ($stegoDoc) {
-                return new EmbedSegmentJob(
-                    stegoDocumentId: $stegoDoc->id,
-                    carrierId:       $segment['carrier']->id,
-                    chunk:           $segment['chunk'],
-                    segmentIndex:    $index,
-                );
-            }, $segments, array_keys($segments));
+**Total: 2–3 days**
 
-            Bus::batch($jobs)
-                ->then(fn(Batch $b) => $stegoDoc->update(['status' => 'ready']))
-                ->catch(function (Batch $b, Throwable $e) use ($stegoDoc, $carriers) {
-                    $this->poolSelector->release($carriers);
-                    $stegoDoc->update([
-                        'status'        => 'failed',
-                        'failed_reason' => $e->getMessage(),
-                    ]);
-                })
-                ->dispatch();
+The heavy lifting (CloudStorageService, S3/B2 config) is already done. The main work is auditing every place that reads `carrier->file_path` and ensuring cloud compatibility — especially [`ValidateCarrierJob`](app/Jobs/ValidateCarrierJob.php) which must download to temp for external tools.
 
-        } catch (Throwable $e) {
-            $this->poolSelector->release($carriers);
-            $stegoDoc->update(['status' => 'failed', 'failed_reason' => $e->getMessage()]);
-            throw $e;
-        }
+**Difficulty: Moderate (2–3 days)**
 
-        return $stegoDoc;
-    });
-}
+Cloud infrastructure already exists (CloudStorageService, S3/B2 config, signed URLs). The main work is updating file access patterns:
 
-Step 4 — Python embedder receives a variable-size chunk
-Since chunks are now variable size (not equal), the Python script needs to handle arbitrary payload lengths cleanly. The NumPy approach already does this, but add an explicit length header so the decoder knows exactly how many bytes to extract:
-python# scripts/stego/embed_and_measure.py
-import sys, json, struct
-import numpy as np
-from PIL import Image
-from skimage.metrics import peak_signal_noise_ratio
+**Required changes:**
+1. **Carrier upload** ([`CarrierPoolController@store()`](app/Http/Controllers/Api/CarrierPoolController.php:85)): Add `Storage::disk(config('stegolock.storage.disk'))->putFile()` — 1 hour
+2. **ValidateCarrierJob** ([`app/Jobs/ValidateCarrierJob.php`](app/Jobs/ValidateCarrierJob.php:57)): Replace `Storage::path()` with `Storage::disk()->get()` + write to temp file for Python tools — 3-4 hours (critical)
+3. **Carrier deletion** ([`CarrierPoolController@destroy()`](app/Http/Controllers/Api/CarrierPoolController.php:168)): Specify disk — 30 min
+4. **Carrier preview/download** (if endpoints exist): Add cloud-aware response with signed URLs — 2-3 hours
+5. **Migration script** (optional): Upload existing local carriers to cloud — 1-2 hours
 
-HEADER_BYTES = 4   # stores payload length as uint32
+**Configuration already present:**
+- `config/stegolock.php` has `'storage' => ['disk' => env('STEGOLOCK_STORAGE_DISK', 'local')]`
+- Set `STEGOLOCK_STORAGE_DISK=s3` in `.env`
 
-def embed(carrier_path: str, data: bytes, output_path: str) -> dict:
-    # Prepend a 4-byte length header so decode knows where the payload ends
-    payload = struct.pack('>I', len(data)) + data
-
-    img      = Image.open(carrier_path).convert('RGB')
-    original = np.array(img, dtype=np.uint8)
-    arr      = original.copy()
-    flat     = arr.flatten()
-
-    bits = np.unpackbits(np.frombuffer(payload, dtype=np.uint8))
-
-    if len(bits) > len(flat):
-        raise ValueError(
-            f"The message you want to hide is too long: {len(data)}"
-        )
-
-    flat[:len(bits)] = (flat[:len(bits)] & 0xFE) | bits
-    result = flat.reshape(arr.shape)
-
-    psnr = peak_signal_noise_ratio(original, result, data_range=255)
-
-    if psnr < 40.0:
-        raise ValueError(f"PSNR {psnr:.2f} dB is below the 40 dB threshold")
-
-    Image.fromarray(result, 'RGB').save(output_path, compress_level=1)
-
-    return {'psnr': round(psnr, 4), 'output': output_path}
-
-
-def decode(carrier_path: str) -> bytes:
-    img  = Image.open(carrier_path).convert('RGB')
-    flat = np.array(img, dtype=np.uint8).flatten()
-
-    # Read the 4-byte length header first
-    header_bits  = (flat[:HEADER_BYTES * 8] & 1).astype(np.uint8)
-    payload_len  = struct.unpack('>I', np.packbits(header_bits).tobytes())[0]
-
-    # Then read exactly that many bytes
-    total_bits   = (HEADER_BYTES + payload_len) * 8
-    all_bits     = (flat[:total_bits] & 1).astype(np.uint8)
-    all_bytes    = np.packbits(all_bits).tobytes()
-
-    return all_bytes[HEADER_BYTES:]   # strip the header
-
-
-if __name__ == '__main__':
-    action = sys.argv[1]
-
-    if action == 'embed':
-        carrier_path = sys.argv[2]
-        data_hex     = sys.argv[3]
-        output_path  = sys.argv[4]
-        result       = embed(carrier_path, bytes.fromhex(data_hex), output_path)
-        print(json.dumps(result))
-
-    elif action == 'decode':
-        carrier_path = sys.argv[2]
-        data         = decode(carrier_path)
-        print(data.hex())
-
-What the full flow looks like now
-Document (5MB)
-    ↓ compress + encrypt
-Ciphertext (1.8MB)
-    ↓ CarrierPoolSelector (sorted largest-first)
-Carriers selected:
-  carrier_A — 900KB capacity  → chunk 1: 900KB
-  carrier_B — 700KB capacity  → chunk 2: 700KB
-  carrier_C — 200KB capacity  → chunk 3: 200KB  (last carrier gets remainder)
-    ↓ EmbedSegmentJob × 3 (parallel)
-3 stego output images in R2
-    ↓ stego_segments records with s3_key per segment
-StegDocument status: ready
-Every carrier is filled to its capacity. No carrier is skipped because the chunk was too large. No space is wasted on small fixed-size chunks leaving a large carrier mostly empty.
-
-One schema addition needed
-Add chunk_size_bytes to stego_segments so decoding can verify integrity without re-measuring:
-php// Migration
-$table->unsignedBigInteger('chunk_size_bytes')->after('segment_index');
-php// In EmbedSegmentJob::handle()
-StegSegment::create([
-    'stego_document_id' => $this->stegoDocumentId,
-    'stego_carrier_id'  => $this->carrierId,
-    'segment_index'     => $this->segmentIndex,
-    'encrypted_chunk'   => $this->chunk,
-    'chunk_size_bytes'  => strlen(base64_decode($this->chunk)),
-    'chunk_hash'        => hash('sha256', $this->chunk),
-    's3_key'            => $r2Key,
-]);
-This gives the decoder a fast integrity check — compare chunk_size_bytes against the length header extracted from the carrier — without having to decode the full payload first.
+**Key risk:** [`ValidateCarrierJob`](app/Jobs/ValidateCarrierJob.php) uses `Storage::path()` which fails for cloud disks. Must download to temp file before running Python validation tools (PSNR, wav_validator). This is the only significant blocker.

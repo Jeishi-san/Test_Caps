@@ -1,3 +1,41 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+    .bg-grid-pattern {
+        background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23000' fill-opacity='0.015' fill-rule='evenodd'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E");
+    }
+
+    .orb-purple {
+        @apply absolute w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply blur-xl opacity-70 animate-blob;
+        top: -4rem;
+        left: -4rem;
+    }
+
+    .orb-indigo {
+        @apply absolute w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply blur-xl opacity-70 animate-blob animation-delay-2000;
+        top: -4rem;
+        right: -4rem;
+    }
+
+    .orb-blue {
+        @apply absolute w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply blur-xl opacity-70 animate-blob animation-delay-4000;
+        bottom: -4rem;
+        left: -4rem;
+    }
+
+    .circle-top-right {
+        @apply absolute w-64 h-64 rounded-full bg-indigo-200/30;
+        top: 25%;
+        right: 0;
+        transform: translate(25%, -25%);
+    }
+
+    .circle-bottom-left {
+        @apply absolute w-96 h-96 rounded-full bg-purple-200/30;
+        bottom: 33%;
+        left: 0;
+        transform: translate(-33%, 33%);
+    }
+}

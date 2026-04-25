@@ -17,7 +17,8 @@ import {
   Loader2,
   FolderOpen,
   Info,
-  Unlock
+  Unlock,
+  Shield
 } from 'lucide-react';
 import type { DocumentEntity } from '@/types/entities';
 import { formatFileSize } from '@/utils/fileSize';
@@ -26,6 +27,7 @@ import Dropdown from '@/Components/Dropdown';
 interface DocumentCardProps {
   document: DocumentEntity;
   onPreview: (document: DocumentEntity) => void;
+  onDownload: (document: DocumentEntity) => void;
   onUnlock: (document: DocumentEntity) => void;
   onShare: (document: DocumentEntity) => void;
   onRename: (document: DocumentEntity) => void;
@@ -41,6 +43,7 @@ interface DocumentCardProps {
 export default function DocumentCard({
   document,
   onPreview,
+  onDownload,
   onUnlock,
   onShare,
   onRename,
@@ -57,17 +60,24 @@ export default function DocumentCard({
 
   const getFileIcon = (extension: string) => {
     const ext = extension?.toLowerCase();
+    let bgColor = 'bg-gray-100';
+    let textColor = 'text-gray-600';
     
-    if (ext === 'pdf') return <FileText className="w-8 h-8 text-red-500" />;
-    if (['doc', 'docx'].includes(ext)) return <FileText className="w-8 h-8 text-blue-600" />;
-    if (['xls', 'xlsx'].includes(ext)) return <FileText className="w-8 h-8 text-green-600" />;
-    if (['ppt', 'pptx'].includes(ext)) return <FileText className="w-8 h-8 text-orange-500" />;
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return <ImageIcon className="w-8 h-8 text-purple-500" />;
-    if (['mp4', 'webm', 'mov'].includes(ext)) return <Film className="w-8 h-8 text-indigo-500" />;
-    if (['mp3', 'wav', 'flac'].includes(ext)) return <Music className="w-8 h-8 text-pink-500" />;
-    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <Archive className="w-8 h-8 text-amber-600" />;
+    if (ext === 'pdf') { bgColor = 'bg-red-100'; textColor = 'text-red-600'; }
+    else if (['doc', 'docx'].includes(ext)) { bgColor = 'bg-blue-100'; textColor = 'text-blue-600'; }
+    else if (['txt'].includes(ext)) { bgColor = 'bg-gray-100'; textColor = 'text-gray-600'; }
+    else { bgColor = 'bg-purple-100'; textColor = 'text-purple-600'; }
     
-    return <File className="w-8 h-8 text-gray-500" />;
+    const renderIcon = () => {
+      if (ext === 'pdf' || ['doc', 'docx'].includes(ext) || ['txt'].includes(ext)) return <FileText className={`w-8 h-8 ${textColor}`} />;
+      return <File className={`w-8 h-8 ${textColor}`} />;
+    };
+
+    return (
+      <div className={`p-3 rounded-xl ${bgColor}`}>
+        {renderIcon()}
+      </div>
+    );
   };
 
   const handleStarClick = async (e: React.MouseEvent) => {
@@ -79,9 +89,9 @@ export default function DocumentCard({
     setIsStarring(false);
   };
 
-  return (
+    return (
     <div
-      className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 group relative"
+      className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/50 p-6 shadow-sm transition-all duration-200 hover:shadow-xl hover:border-indigo-200 group relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -131,6 +141,13 @@ export default function DocumentCard({
             >
               <Eye className="w-4 h-4" />
               Preview
+            </button>
+            <button
+              onClick={() => onDownload(document)}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+            >
+              <Download className="w-4 h-4" />
+              Download
             </button>
             <button
               onClick={() => onUnlock(document)}
@@ -184,34 +201,34 @@ export default function DocumentCard({
         </Dropdown>
       </div>
 
-      {/* File Icon Section */}
-      <div className="pt-10 pb-6 px-5 flex items-center justify-center">
-        {getFileIcon(document.extension)}
-      </div>
+       {/* File Icon Section */}
+       <div className="flex items-center justify-center py-6">
+         {getFileIcon(document.extension)}
+       </div>
 
-      {/* Card Content */}
-      <div className="px-4 pb-4">
-        <div className="flex items-center gap-1.5 mb-1">
-          <h3 
-            className="text-sm font-medium text-gray-900 truncate flex-1" 
-            title={document.name}
-          >
-            {document.name}
-          </h3>
-          {document.is_stegoed && (
-            <Lock
-              className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0"
-              aria-label="This document has been locked with StegoLock"
-            />
-          )}
-        </div>
-        
-        <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
-          <span>{formatFileSize(document.size)}</span>
-          <span>
-            {document.created_at ? new Date(document.created_at).toLocaleDateString() : 'N/A'}
-          </span>
-        </div>
+       {/* Card Content */}
+       <div className="px-4 pb-4">
+         <h3 
+           className="font-semibold text-gray-900 line-clamp-2" 
+           title={document.name}
+         >
+           {document.name}
+         </h3>
+         
+         <div className="flex items-center justify-between text-sm text-gray-500 mt-2">
+           <span>{formatFileSize(document.size)}</span>
+           <span>
+             {document.created_at ? new Date(document.created_at).toLocaleDateString() : 'N/A'}
+           </span>
+         </div>
+
+         {/* Secured Badge */}
+         {document.is_stegoed && (
+           <div className="mt-3 inline-flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1">
+             <Shield className="w-4 h-4 text-green-600" />
+             <span className="text-xs font-medium text-green-700">Secured</span>
+           </div>
+         )}
 
         {/* Action Buttons Bar */}
         <div className={`mt-3 grid grid-cols-3 gap-1 transition-all duration-200 ${

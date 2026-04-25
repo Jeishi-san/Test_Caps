@@ -213,10 +213,9 @@ export default function Index({ auth, folders }: FoldersIndexProps) {
             </div>
 
             {/* Create Modal */}
-            <Modal show={showCreate} onClose={() => setShowCreate(false)}>
-                <form onSubmit={handleCreate} className="p-6">
-                    <h2 className="text-lg font-medium text-gray-900">New Folder</h2>
-                    <div className="mt-4 space-y-4">
+            <Modal show={showCreate} onClose={() => setShowCreate(false)} title="New Folder">
+                <form onSubmit={handleCreate}>
+                    <div className="space-y-4">
                         <div>
                             <InputLabel htmlFor="folder_name" value="Folder Name" />
                             <TextInput
@@ -243,7 +242,7 @@ export default function Index({ auth, folders }: FoldersIndexProps) {
                             </select>
                         </div>
                     </div>
-                    <div className="mt-6 flex justify-end gap-3">
+                    <div className="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-4">
                         <SecondaryButton onClick={() => setShowCreate(false)} type="button">
                             Cancel
                         </SecondaryButton>
@@ -255,9 +254,8 @@ export default function Index({ auth, folders }: FoldersIndexProps) {
             </Modal>
 
             {/* Rename Modal */}
-            <Modal show={showRename} onClose={() => setShowRename(false)}>
-                <form onSubmit={handleRename} className="p-6">
-                    <h2 className="text-lg font-medium text-gray-900">Rename Folder</h2>
+            <Modal show={showRename} onClose={() => setShowRename(false)} title="Rename Folder">
+                <form onSubmit={handleRename}>
                     <div className="mt-4">
                         <InputLabel htmlFor="rename_value" value="New Name" />
                         <TextInput
@@ -269,7 +267,7 @@ export default function Index({ auth, folders }: FoldersIndexProps) {
                             autoFocus
                         />
                     </div>
-                    <div className="mt-6 flex justify-end gap-3">
+                    <div className="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-4">
                         <SecondaryButton onClick={() => setShowRename(false)} type="button">
                             Cancel
                         </SecondaryButton>

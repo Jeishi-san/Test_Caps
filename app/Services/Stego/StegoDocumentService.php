@@ -161,17 +161,58 @@ class StegoDocumentService
         $selectedCarriers = null;
         $carriersLocked = false;
         $carrierPathsToUse = $carrierPaths;
+        $tmpDir = $this->makeTmpDir('stegolock_');
+        try {
+            if ($carrierPaths === null) {
+                // Use carrier pool - select carriers based on required capacity
+                $ciphertextSize = strlen(base64_decode($encrypted['ciphertext']));
+                $selectedCarriers = $this->carrierPoolSelector->select($userId, $ciphertextSize, $useSystemCarriers);
+                $this->carrierPoolSelector->markInUse($selectedCarriers);
+                $carriersLocked = true;
 
-        if ($carrierPaths === null) {
-            // Use carrier pool - select carriers based on required capacity
-            $ciphertextSize = strlen(base64_decode($encrypted['ciphertext']));
-            $selectedCarriers = $this->carrierPoolSelector->select($userId, $ciphertextSize, $useSystemCarriers);
-            $this->carrierPoolSelector->markInUse($selectedCarriers);
-            $carriersLocked = true;
-
-            // Pool carrier paths are storage-relative; resolve to absolute paths for stego driver.
-            $carrierPathsToUse = $selectedCarriers->map(fn($carrier) => Storage::path($carrier->file_path))->toArray();
-        }
+                // Resolve pool carrier paths to local temp files for stego driver (cloud-compatible)
+                $carrierPathsToUse = $selectedCarriers->map(function ($carrier) use ($tmpDir) {
+                    $disk = Storage::disk(config('stegolock.storage.disk', 'local'));
+                    $content = $disk->get($carrier->file_path);
+                    
+                    if ($content === null) {
+                        throw new \Exception("Carrier file not found on storage: {$carrier->file_path}");
+                    }
+                    
+                    // Create temp file in the encoding temp directory
+                    $inputDir = $tmpDir . '/input_carriers';
+                    if (!is_dir($inputDir)) {
+                        mkdir($inputDir, 0700, true);
+                    }
+                    
+                    $tempPath = $inputDir . '/' . uniqid('carrier_', true) . '.' . $carrier->file_type;
+                    file_put_contents($tempPath, $content);
+                    
+                    return $tempPath;
+                })->toArray();
+            } else {
+                // Resolve provided carrier paths to local temp files (cloud-compatible)
+                $disk = Storage::disk(config('stegolock.storage.disk', 'local'));
+                $carrierPathsToUse = array_map(function ($path) use ($disk, $tmpDir) {
+                    // If it's already a local file, return as is
+                    if (file_exists($path)) {
+                        return $path;
+                    }
+                    // Otherwise, assume it's a storage-relative path; download to temp.
+                    $content = $disk->get($path);
+                    if ($content === null) {
+                        throw new \Exception("Carrier file not found on storage: {$path}");
+                    }
+                    $inputDir = $tmpDir . '/input_carriers';
+                    if (!is_dir($inputDir)) {
+                        mkdir($inputDir, 0700, true);
+                    }
+                    $ext = pathinfo($path, PATHINFO_EXTENSION);
+                    $tempPath = $inputDir . '/' . uniqid('carrier_', true) . ($ext ? '.' . $ext : '');
+                    file_put_contents($tempPath, $content);
+                    return $tempPath;
+                }, $carrierPaths);
+            }
 
         // -----------------------------------------------------------------
         // Step 4: Compute carrier capacities, then split ciphertext into chunks
@@ -195,8 +236,6 @@ class StegoDocumentService
         // -----------------------------------------------------------------
         // Step 4 & 5: Embed each chunk into its carrier and upload to S3
         // -----------------------------------------------------------------
-        $tmpDir = $this->makeTmpDir('stegolock_');
-
         $carrierRecords  = [];
         $segmentRecords  = [];
         $qualityMetrics  = [];   // keyed by segment index
@@ -319,15 +358,15 @@ class StegoDocumentService
                 'failed_reason' => substr($e->getMessage(), 0, 500),
             ]);
             throw $e;
-        } finally {
-            // Clean up temp files.
-            $this->cleanupDir($tmpDir);
         }
 
         return [
             'stego_document'  => $stegoDoc->fresh(),
             'quality_metrics' => array_values($qualityMetrics),
         ];
+        } finally {
+            $this->cleanupDir($tmpDir);
+        }
     }
 
     // =========================================================================

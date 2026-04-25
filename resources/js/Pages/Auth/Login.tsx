@@ -6,7 +6,8 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
-import { Mail, Lock } from 'lucide-react';
+import { useState } from 'react';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, Shield } from 'lucide-react';
 
 export default function Login({
     status,
@@ -20,6 +21,8 @@ export default function Login({
         password: '',
         remember: false as boolean,
     });
+    const [showPassword, setShowPassword] = useState(false);
+    const hasErrors = Object.keys(errors).length > 0;
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
@@ -39,10 +42,10 @@ export default function Login({
                 </div>
             )}
 
-            <form onSubmit={submit}>
+            <form onSubmit={submit} className={hasErrors ? 'animate-shake' : ''}>
 
                 <div className="mt-1">
-                    <InputLabel htmlFor="email" value="Email" />
+                    <InputLabel htmlFor="email" value="Email Address" />
 
                     <TextInput
                         id="email"
@@ -53,6 +56,8 @@ export default function Login({
                         autoComplete="username"
                         isFocused={true}
                         icon={<Mail className="w-5 h-5" />}
+                        rightIcon={errors.email ? <AlertCircle className="w-5 h-5 text-red-500" /> : undefined}
+                        error={!!errors.email}
                         onChange={(e) => setData('email', e.target.value)}
                     />
 
@@ -64,12 +69,22 @@ export default function Login({
 
                     <TextInput
                         id="password"
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         name="password"
                         value={data.password}
                         className="mt-1 block w-full"
                         autoComplete="current-password"
                         icon={<Lock className="w-5 h-5" />}
+                        rightIcon={
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="focus:outline-none"
+                            >
+                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                        }
+                        error={!!errors.password}
                         onChange={(e) => setData('password', e.target.value)}
                     />
 
@@ -99,30 +114,42 @@ export default function Login({
                         <div className="text-right mb-4">
                             <Link
                                 href={route('password.request')}
-                                className="text-sm text-gray-600 hover:text-gray-900"
+                                className="text-sm text-blue-600 hover:text-blue-700"
                             >
                                 Forgot your password?
                             </Link>
                         </div>
                     )}
 
-                    <PrimaryButton className="w-full" disabled={processing} loading={processing}>
-                        Log in
+                    <PrimaryButton className="w-full flex items-center justify-center gap-2" disabled={processing}>
+                        {processing && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {processing ? 'Signing In...' : 'Sign In'}
                     </PrimaryButton>
                 </div>
 
-                <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-                    <p className="text-sm text-gray-600">
-                        Don't have an account?{' '}
-                        <Link
-                            href={route('register')}
-                            className="text-indigo-600 hover:text-indigo-800 font-medium"
+                <div className="mt-6 pt-6 border-t border-gray-200 flex items-center justify-center gap-2">
+                    <span className="text-sm text-gray-600">New to StegoLock?</span>
+                </div>
+
+                <div className="mt-4">
+                    <Link href={route('register')} className="w-full block">
+                        <button
+                            type="button"
+                            className="w-full border-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-xl py-3.5 font-medium transition-colors"
                         >
-                            Create an account instead
-                        </Link>
-                    </p>
+                            Create Account
+                        </button>
+                    </Link>
                 </div>
             </form>
+
+            {/* Admin Login Button */}
+            <Link
+                href={route('admin.login')}
+                className="fixed bottom-4 right-4 z-50 bg-slate-900/90 hover:bg-slate-800 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-colors"
+            >
+                <Shield className="w-6 h-6" />
+            </Link>
         </GuestLayout>
     );
 }

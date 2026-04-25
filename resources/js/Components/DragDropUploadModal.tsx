@@ -177,30 +177,37 @@ export default function DragDropUploadModal({
 
                 {/* Drag and Drop Zone */}
                 <div
-                    className={`mt-6 border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                    className={`mt-6 border-2 border-dashed rounded-2xl p-12 text-center transition-colors ${
                         isDragging
                             ? 'border-indigo-500 bg-indigo-50'
-                            : 'border-gray-300 bg-gray-50 hover:border-gray-400'
+                            : 'border-gray-300 hover:border-indigo-400 hover:bg-gray-50'
                     }`}
                     onDragEnter={handleDragEnter}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                 >
-                    <svg
-                        className="mx-auto h-12 w-12 text-gray-400"
-                        stroke="currentColor"
-                        fill="none"
-                        viewBox="0 0 48 48"
-                    >
-                        <path
-                            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                            strokeWidth={2}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        />
-                    </svg>
-                    <div className="mt-4">
+                    <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center ${
+                        isDragging ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                        <svg
+                            className="h-12 w-12"
+                            stroke="currentColor"
+                            fill="none"
+                            viewBox="0 0 48 48"
+                        >
+                            <path
+                                d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        </svg>
+                    </div>
+                    <p className="mt-4 text-lg font-medium text-gray-900">
+                        Drop files here or click to browse
+                    </p>
+                    <div className="mt-1">
                         <label
                             htmlFor="file-upload"
                             className="cursor-pointer font-medium text-indigo-600 hover:text-indigo-500"
@@ -214,10 +221,10 @@ export default function DragDropUploadModal({
                             onChange={handleFileSelect}
                             className="sr-only"
                         />
-                        <p className="mt-1 text-sm text-gray-600">or drag and drop</p>
+                        <p className="mt-1 text-sm text-gray-500">or drag and drop</p>
                     </div>
-                    <p className="mt-2 text-xs text-gray-500">
-                        Supported types: PDF, DOC, DOCX, TXT. Max 50 MB per file.
+                    <p className="mt-2 text-sm text-gray-500">
+                        Supports .pdf, .doc/.docx, .txt files only
                     </p>
                 </div>
 

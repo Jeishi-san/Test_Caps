@@ -16,7 +16,7 @@ export default function AdminLayout({ children, onLogout }: AdminLayoutProps) {
             <AdminSidebar role={auth.user.role} onLogout={onLogout} />
             <div className="flex min-h-screen flex-1 flex-col overflow-hidden">
                 <AdminTopbar email={auth.user.email} role={auth.user.role} />
-                <main className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.08),_transparent_30%),linear-gradient(180deg,_rgba(2,6,23,0.98),_rgba(15,23,42,0.96))] p-6 sm:p-8">
+                <main className="flex-1 overflow-y-auto bg-slate-950 p-6 sm:p-8">
                     {children}
                 </main>
             </div>

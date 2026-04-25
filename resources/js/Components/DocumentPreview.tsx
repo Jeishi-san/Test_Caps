@@ -177,7 +177,7 @@ export default function DocumentPreview({ show, onClose, document }: DocumentPre
                     Preview not available for this file type
                 </p>
                 <a
-                    href={fileUrl}
+                    href={getDownloadUrl()}
                     download
                     className="mt-4 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
                 >

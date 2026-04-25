@@ -81,8 +81,9 @@ class CarrierPoolController extends Controller
             ], 422);
         }
 
-        // Store carrier file
-        $path = Storage::putFile('stego/carriers/' . $user->id, $file);
+        // Store carrier file on configured disk
+        $disk = Storage::disk(config('stegolock.storage.disk', 'local'));
+        $path = $disk->putFile('stego/carriers/' . $user->id, $file);
 
         // Create carrier record with pending validation status
         $carrier = StegoCarrier::create([
@@ -164,12 +165,50 @@ class CarrierPoolController extends Controller
             ], 409);
         }
 
-        // Delete file from storage
-        Storage::delete($carrier->file_path);
+        // Delete file from storage using configured disk
+        $disk = Storage::disk(config('stegolock.storage.disk', 'local'));
+        $disk->delete($carrier->file_path);
 
         // Delete carrier record
         $carrier->delete();
 
         return response()->json(['message' => 'Carrier removed from pool.']);
+    }
+
+    /**
+     * Download or preview a carrier file (cloud-aware)
+     * 
+     * @param Request $request
+     * @param int $id Carrier ID
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\RedirectResponse
+     */
+    public function download(Request $request, int $id)
+    {
+        $carrier = StegoCarrier::where('id', $id)
+            ->where('uploaded_by', Auth::id())
+            ->firstOrFail();
+
+        $disk = Storage::disk(config('stegolock.storage.disk', 'local'));
+        $filePath = $carrier->file_path;
+
+        if (!$disk->exists($filePath)) {
+            abort(404, 'Carrier file not found on storage disk');
+        }
+
+        $diskName = config('stegolock.storage.disk', 'local');
+
+        // Local disk: stream file directly
+        if ($diskName === 'local') {
+            $localPath = $disk->path($filePath);
+            return response()->file($localPath, [
+                'Content-Disposition' => 'inline; filename="' . $carrier->name . '"',
+                'Content-Type' => $carrier->mime_type ?? 'application/octet-stream',
+            ]);
+        }
+
+        // Cloud storage: redirect to temporary signed URL using CloudStorageService
+        $cloudStorage = new \App\Services\Stego\CloudStorageService();
+        $temporaryUrl = $cloudStorage->temporaryUrl($filePath, now()->addMinutes(15));
+        return redirect()->away($temporaryUrl);
     }
 }

@@ -15,6 +15,27 @@ export default {
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
             },
+            keyframes: {
+                shake: {
+                    '0%, 100%': { transform: 'translateX(0)' },
+                    '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-4px)' },
+                    '20%, 40%, 60%, 80%': { transform: 'translateX(4px)' },
+                },
+                blob: {
+                    '0%': { transform: 'scale(1)' },
+                    '33%': { transform: 'scale(1.1)' },
+                    '66%': { transform: 'scale(1.05)' },
+                    '100%': { transform: 'scale(1)' },
+                },
+            },
+            animation: {
+                shake: 'shake 0.5s ease-in-out',
+                blob: 'blob 7s infinite ease-in-out',
+            },
+            animationDelay: {
+                '2000': '2000ms',
+                '4000': '4000ms',
+            },
         },
     },
 

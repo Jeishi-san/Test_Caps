@@ -1,29 +1,33 @@
-import ApplicationLogo from '@/Components/ApplicationLogo';
 import { Link } from '@inertiajs/react';
 import { PropsWithChildren } from 'react';
 import { Shield } from 'lucide-react';
 
 export default function Guest({ children }: PropsWithChildren) {
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 bg-grid-pattern relative overflow-hidden">
             {/* Decorative Background Elements */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-gradient-to-br from-indigo-400/10 to-purple-500/10 blur-3xl" />
-                <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-gradient-to-br from-purple-400/10 to-indigo-500/10 blur-3xl" />
+                <div className="orb-purple" />
+                <div className="orb-indigo" />
+                <div className="orb-blue" />
+                <div className="circle-top-right" />
+                <div className="circle-bottom-left" />
             </div>
 
             <div className="relative z-10 flex flex-col items-center">
                 {/* Brand Header */}
                 <Link href="/" className="mb-8 flex flex-col items-center">
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
-                        <Shield className="w-10 h-10 text-white" />
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/50">
+                        <Shield className="w-12 h-12 text-white" />
                     </div>
                     <h1 className="mt-4 text-4xl font-bold text-gray-900">
-                        Welcome to Stegolock</h1>
+                        Welcome to StegoLock
+                    </h1>
                 </Link>
 
                 {/* Authentication Card */}
-                <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl px-8 py-8">
+                <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl shadow-indigo-200/50 px-8 py-8">
+                    <h2 className="text-2xl font-semibold text-gray-900 mb-6">Sign In</h2>
                     {children}
                 </div>
             </div>

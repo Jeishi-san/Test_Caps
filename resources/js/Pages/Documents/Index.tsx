@@ -7,6 +7,7 @@ import DragDropUploadModal from '@/Components/DragDropUploadModal';
 import DocumentPreview from '@/Components/DocumentPreview';
 import PrimaryButton from '@/Components/PrimaryButton';
 import ShareModal from '@/Components/ShareModal';
+import DeleteConfirmationModal from '@/Components/DeleteConfirmationModal';
 import DocumentCard from '@/Components/DocumentCard';
 import PostUnlockDialog from '@/Components/PostUnlockDialog';
 import axios from 'axios';
@@ -29,7 +30,8 @@ import {
   Loader2,
   FolderOpen,
   Info,
-  Unlock
+  Unlock,
+  Shield
 } from 'lucide-react';
 
 interface DocumentsPageProps extends PageProps {
@@ -57,6 +59,9 @@ export default function Index({
     const [processingDocuments, setProcessingDocuments] = useState<Record<number, string>>({});
     const [showPostUnlockDialog, setShowPostUnlockDialog] = useState(false);
     const [unlockedDocument, setUnlockedDocument] = useState<DocumentEntity | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+    const [deleteTargetName, setDeleteTargetName] = useState('');
 
     const handleUploadSuccess = () => {
         router.reload();
@@ -84,24 +89,31 @@ export default function Index({
         }
     };
 
-    const handleDelete = async (documentId: number, documentName: string) => {
-        if (!confirm(`Are you sure you want to delete "${documentName}"?`)) return;
+    const handleDeleteClick = (documentId: number, documentName: string) => {
+        setDeleteTargetId(documentId);
+        setDeleteTargetName(documentName);
+        setShowDeleteConfirm(true);
+    };
 
+    const handleDeleteConfirm = async () => {
+        if (!deleteTargetId) return;
+        
         try {
-            await axios.delete(`/documents/${documentId}`);
+            await axios.delete(`/documents/${deleteTargetId}`);
             router.reload();
         } catch (error) {
             console.error('Failed to delete document:', error);
+        } finally {
+            setShowDeleteConfirm(false);
+            setDeleteTargetId(null);
+            setDeleteTargetName('');
         }
     };
 
     const handleDownload = (document: DocumentEntity) => {
-        const fileUrl = document.file_path.startsWith('http') 
-            ? document.file_path 
-            : `/${document.file_path}`;
-        
+        const url = route('documents.download', document.id);
         const link = window.document.createElement('a');
-        link.href = fileUrl;
+        link.href = url;
         link.download = document.name;
         link.click();
     };
@@ -249,45 +261,36 @@ export default function Index({
                     <div className="overflow-hidden bg-white shadow-sm sm:rounded-lg">
                         <div className="p-6">
                             {documents.length === 0 ? (
-                                <div className="py-12 text-center">
-                                    <svg
-                                        className="mx-auto h-12 w-12 text-gray-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                        />
-                                    </svg>
-                                    <h3 className="mt-2 text-sm font-medium text-gray-900">
-                                        No documents
-                                    </h3>
-                                    <p className="mt-1 text-sm text-gray-500">
-                                        Get started by uploading a document.
-                                    </p>
-                                    <div className="mt-6">
-                                        <PrimaryButton onClick={() => setShowUploadModal(true)}>
-                                            Upload your first document
-                                        </PrimaryButton>
-                                    </div>
-                                </div>
+                                 <div className="flex flex-col items-center justify-center py-12">
+                                     <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                                         <Shield className="w-10 h-10 text-gray-400" />
+                                     </div>
+                                     <h3 className="text-lg font-semibold text-gray-900">
+                                         No Documents Found
+                                     </h3>
+                                     <p className="mt-1 text-sm text-gray-500">
+                                         Upload files to get started
+                                     </p>
+                                     <div className="mt-6">
+                                         <PrimaryButton onClick={() => setShowUploadModal(true)}>
+                                             Upload Files
+                                         </PrimaryButton>
+                                     </div>
+                                 </div>
                             ) : (
-                                /* Responsive Document Card Grid */
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                                 /* Responsive Document Card Grid */
+                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
                                     {documents.map((document) => (
                                         <DocumentCard
                                             key={document.id}
                                             document={document}
                                             onPreview={handlePreview}
+                                            onDownload={handleDownload}
                                             onUnlock={handleUnlock}
                                             onShare={handleShare}
                                             onRename={handleEdit}
                                             onMove={handleMove}
-                                            onDelete={() => handleDelete(document.id, document.name)}
+                                            onDelete={() => handleDeleteClick(document.id, document.name)}
                                             onInfo={handleInfo}
                                             onToggleStar={handleToggleStar}
                                             isProcessing={!!processingDocuments[document.id]}
@@ -345,6 +348,14 @@ export default function Index({
                     }}
                 />
             )}
+
+            <DeleteConfirmationModal
+                show={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={handleDeleteConfirm}
+                itemName={deleteTargetName}
+                itemType="document"
+            />
         </AuthenticatedLayout>
     );
 }

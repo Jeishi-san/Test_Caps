@@ -54,56 +54,76 @@ class ValidateCarrierJob implements ShouldQueue
         }
 
         try {
-            $filePath = Storage::path($carrier->file_path);
-
-            if (!file_exists($filePath)) {
-                $this->markInvalid($carrier, "Carrier file not found on disk: {$carrier->file_path}");
+            // Get configured storage disk
+            $disk = Storage::disk(config('stegolock.storage.disk', 'local'));
+            
+            // Retrieve file content from storage
+            $content = $disk->get($carrier->file_path);
+            
+            if ($content === null) {
+                $this->markInvalid($carrier, "Carrier file not found on storage disk: {$carrier->file_path}");
                 return;
             }
 
-            $mime = $carrier->mime_type ?? '';
-
-            // Audio (WAV) validation: run wav_validator.py
-            if (str_starts_with($mime, 'audio/')) {
-                $this->validateAudioCarrier($carrier, $filePath);
+            // Create temp file for validation (required for local tools like Python scripts)
+            $tmpPath = tempnam(sys_get_temp_dir(), 'carrier_') . '.' . $carrier->file_type;
+            
+            if (file_put_contents($tmpPath, $content) === false) {
+                $this->markInvalid($carrier, "Failed to write carrier to temporary file for validation");
                 return;
             }
 
-            // Text (TXT) validation: simple readability and non-empty check
-            if (str_starts_with($mime, 'text/')) {
-                $this->validateTextCarrier($carrier, $filePath);
-                return;
-            }
+            try {
+                $mime = $carrier->mime_type ?? '';
 
-            // Image validation: capacity + PSNR
-            $capacity = $stegoService->capacity($filePath);
-            $carrier->capacity_bytes = $capacity;
-
-            if ($capacity <= 0) {
-                $this->markInvalid($carrier, "Carrier capacity is zero or insufficient");
-                return;
-            }
-
-            $psnrResult = $this->measureBaselinePsnr($stegoService, $filePath);
-
-            if ($psnrResult !== null) {
-                $carrier->psnr = $psnrResult;
-
-                if ($psnrResult < 40.0) {
-                    $this->markInvalid($carrier, "PSNR {$psnrResult} dB is below the 40 dB threshold");
+                // Audio (WAV) validation: run wav_validator.py
+                if (str_starts_with($mime, 'audio/')) {
+                    $this->validateAudioCarrier($carrier, $tmpPath);
                     return;
                 }
+
+                // Text (TXT) validation: simple readability and non-empty check
+                if (str_starts_with($mime, 'text/')) {
+                    $this->validateTextCarrier($carrier, $tmpPath);
+                    return;
+                }
+
+                // Image validation: capacity + PSNR
+                $capacity = $stegoService->capacity($tmpPath);
+                $carrier->capacity_bytes = $capacity;
+
+                if ($capacity <= 0) {
+                    $this->markInvalid($carrier, "Carrier capacity is zero or insufficient");
+                    return;
+                }
+
+                $psnrResult = $this->measureBaselinePsnr($stegoService, $tmpPath);
+
+                if ($psnrResult !== null) {
+                    $carrier->psnr = $psnrResult;
+
+                    if ($psnrResult < 40.0) {
+                        $this->markInvalid($carrier, "PSNR {$psnrResult} dB is below the 40 dB threshold");
+                        return;
+                    }
+                }
+
+                $carrier->validation_status = 'valid';
+                $carrier->validated_at = now();
+                $carrier->save();
+
+                Log::info('ValidateCarrierJob: Carrier validated successfully', [
+                    'carrier_id' => $carrier->id,
+                    'capacity_bytes' => $capacity,
+                    'psnr' => $carrier->psnr,
+                ]);
+
+            } finally {
+                // Clean up temp file
+                if (file_exists($tmpPath)) {
+                    @unlink($tmpPath);
+                }
             }
-
-            $carrier->validation_status = 'valid';
-            $carrier->validated_at = now();
-            $carrier->save();
-
-            Log::info('ValidateCarrierJob: Carrier validated successfully', [
-                'carrier_id' => $carrier->id,
-                'capacity_bytes' => $capacity,
-                'psnr' => $carrier->psnr,
-            ]);
 
         } catch (Throwable $e) {
             Log::error('ValidateCarrierJob: Validation failed', [

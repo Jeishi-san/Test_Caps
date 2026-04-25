@@ -135,12 +135,17 @@ Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
          Route::post('/carriers', [CarrierPoolController::class, 'store'])
              ->name('carriers.store');
 
-         // Remove a carrier from the pool
-         Route::delete('/carriers/{id}', [CarrierPoolController::class, 'destroy'])
-             ->name('carriers.destroy')
-             ->whereNumber('id');
+          // Remove a carrier from the pool
+          Route::delete('/carriers/{id}', [CarrierPoolController::class, 'destroy'])
+              ->name('carriers.destroy')
+              ->whereNumber('id');
 
-         // Preflight check — verify pool has sufficient capacity before encoding
+          // Download a carrier file (cloud-aware)
+          Route::get('/carriers/{id}/download', [CarrierPoolController::class, 'download'])
+              ->name('carriers.download')
+              ->whereNumber('id');
+
+          // Preflight check — verify pool has sufficient capacity before encoding
          Route::post('/preflight', [StegoDocumentController::class, 'preflight'])
              ->name('preflight');
 

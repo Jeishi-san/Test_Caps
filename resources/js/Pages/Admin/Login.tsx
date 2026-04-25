@@ -34,13 +34,13 @@ export default function Login() {
             <DecorativeBackground />
 
             <div className="relative z-10 w-full max-w-md">
-                <div className="rounded-3xl border border-slate-700/50 bg-slate-900/90 p-8 shadow-2xl shadow-slate-950/30 backdrop-blur-xl">
+                <div className="rounded-2xl border border-slate-700/50 bg-slate-900/90 p-8 shadow-2xl shadow-slate-950/30 backdrop-blur-xl">
                     <div className="mb-8 text-center">
-                        <div className="mx-auto mb-4 inline-flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-emerald-600 shadow-lg shadow-cyan-950/30">
+                        <div className="mx-auto mb-4 inline-flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 shadow-lg shadow-red-950/30">
                             <Shield className="size-8 text-white" />
                         </div>
                         <h1 className="text-3xl font-bold text-white">StegoLock Admin</h1>
-                        <p className="mt-2 text-sm text-slate-400">Secure system administration</p>
+                        <p className="mt-2 text-sm text-slate-400">Secure System Administration</p>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-5">
@@ -55,7 +55,7 @@ export default function Login() {
                                     value={email}
                                     onChange={(event) => setEmail(event.target.value)}
                                     placeholder="admin@stegolock.com"
-                                    className="w-full rounded-xl border border-slate-700 bg-slate-800/50 py-3 pl-11 pr-4 text-white placeholder:text-slate-500 focus:border-cyan-500/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+                                    className="w-full rounded-xl border border-slate-700 bg-slate-800/50 py-3 pl-11 pr-4 text-white placeholder:text-slate-500 focus:border-orange-500/60 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
                                 />
                             </div>
                         </label>
@@ -69,22 +69,22 @@ export default function Login() {
                                     value={password}
                                     onChange={(event) => setPassword(event.target.value)}
                                     placeholder="••••••••"
-                                    className="w-full rounded-xl border border-slate-700 bg-slate-800/50 py-3 pl-11 pr-4 text-white placeholder:text-slate-500 focus:border-cyan-500/60 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+                                    className="w-full rounded-xl border border-slate-700 bg-slate-800/50 py-3 pl-11 pr-4 text-white placeholder:text-slate-500 focus:border-orange-500/60 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
                                 />
                             </div>
                         </label>
 
                         <button
                             type="submit"
-                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 px-4 py-3 font-semibold text-white shadow-lg shadow-cyan-950/30 transition hover:from-cyan-500 hover:to-emerald-500"
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 px-4 py-3 font-semibold text-white shadow-lg shadow-red-950/30 transition hover:from-red-700 hover:to-orange-700"
                         >
                             <Shield className="size-4" />
-                            Sign in
+                            Sign In
                         </button>
                     </form>
 
                     <p className="mt-6 border-t border-slate-800 pt-5 text-center text-xs text-slate-500">
-                        Authorized personnel should use their regular account credentials.
+                        Authorized personnel only
                     </p>
                 </div>
             </div>

@@ -35,7 +35,7 @@ export default function AdminDashboard() {
                     const Icon = stat.icon;
 
                     return (
-                        <div key={stat.label} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl shadow-slate-950/20 transition hover:border-slate-700">
+                        <div key={stat.label} className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 transition hover:border-slate-700">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
                                     <p className="text-sm text-slate-400">{stat.label}</p>
@@ -47,7 +47,7 @@ export default function AdminDashboard() {
                                         <span className="text-slate-500">vs last month</span>
                                     </div>
                                 </div>
-                                <div className={`rounded-2xl p-3 ${stat.color === 'blue' ? 'bg-blue-500/15 text-blue-400' : stat.color === 'green' ? 'bg-emerald-500/15 text-emerald-400' : stat.color === 'purple' ? 'bg-violet-500/15 text-violet-400' : 'bg-rose-500/15 text-rose-400'}`}>
+                                <div className={`rounded-lg p-3 ${stat.color === 'blue' ? 'bg-blue-600/20 text-blue-400' : stat.color === 'green' ? 'bg-green-600/20 text-green-400' : stat.color === 'purple' ? 'bg-purple-600/20 text-purple-400' : 'bg-red-600/20 text-red-400'}`}>
                                     <Icon className="size-6" />
                                 </div>
                             </div>
@@ -57,21 +57,21 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
                     <div className="mb-6 flex items-center gap-2">
                         <Activity className="size-5 text-slate-400" />
                         <h2 className="text-xl font-semibold text-white">System Health</h2>
                     </div>
                     <div className="space-y-4">
                         {systemHealth.map((item) => (
-                            <div key={item.label} className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
+                            <div key={item.label} className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
                                 <div className="flex items-center gap-3">
-                                    <span className={`size-2 rounded-full ${item.status === 'operational' ? 'bg-emerald-500' : item.status === 'degraded' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                                    <span className={`size-2 rounded-full ${item.status === 'operational' ? 'bg-green-500' : item.status === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'}`} />
                                     <span className="text-sm text-slate-300">{item.label}</span>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className="text-sm font-medium text-white">{item.value}</span>
-                                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.status === 'operational' ? 'bg-emerald-500/15 text-emerald-400' : item.status === 'degraded' ? 'bg-amber-500/15 text-amber-400' : 'bg-rose-500/15 text-rose-400'}`}>
+                                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.status === 'operational' ? 'bg-green-600/20 text-green-400' : item.status === 'degraded' ? 'bg-yellow-600/20 text-yellow-400' : 'bg-red-600/20 text-red-400'}`}>
                                         {item.status}
                                     </span>
                                 </div>
@@ -80,15 +80,15 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
                     <div className="mb-6 flex items-center gap-2">
                         <Database className="size-5 text-slate-400" />
                         <h2 className="text-xl font-semibold text-white">Recent Activity</h2>
                     </div>
                     <div className="space-y-4">
                         {recentActivity.map((activity) => (
-                            <div key={`${activity.user}-${activity.time}`} className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3">
-                                <div className={`mt-1 size-3 rounded-full ${activity.status === 'success' ? 'bg-emerald-500' : activity.status === 'warning' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                            <div key={`${activity.user}-${activity.time}`} className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
+                                <div className={`mt-1 size-3 rounded-full ${activity.status === 'success' ? 'bg-green-500' : activity.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'}`} />
                                 <div className="min-w-0 flex-1">
                                     <p className="text-sm text-slate-300">{activity.action}</p>
                                     <p className="mt-1 text-xs text-slate-500">
