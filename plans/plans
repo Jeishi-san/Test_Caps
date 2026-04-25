@@ -1,110 +1,126 @@
-Based on my analysis, moving carrier files to cloud storage is **moderately easy (2-3 days of work)** because significant cloud infrastructure already exists. Here's the detailed breakdown:
+# Function-Level Changes from Recent Git Commits
+
+## Commit: `af5beac` (feat(security): deploy envelope encryption system for shared documents)
+
+- **generateRandomDEK()**: Generates a cryptographically secure 256-bit Document Encryption Key using `random_bytes(32)`
+- **wrapDEK(string $dek, string $userMasterKey): array**: Wraps DEK with user's master key using AES-256-GCM with 12-byte random nonce, returns wrapped DEK, IV, and auth tag
+- **unwrapDEK(string $wrappedDek, string $iv, string $authTag, string $userMasterKey): string**: Unwraps DEK using AES-256-GCM decryption, throws exception on failure
+- **encrypt() (modified)**: Now accepts `encryptionMode` and `viewerUserIds` parameters. Handles envelope mode (generates random DEK, wraps for owner/viewers) vs legacy mode (derives DEK from master key)
+- **isEnvelopeMode(): bool**: Checks if document's `encryption_mode` is set to `envelope_wrapped`
+- **getWrappedDekForUser(int $userId): ?object**: Retrieves wrapped DEK, IV, and auth tag for a specific user from the document-user pivot table
+- **sharedWith() (modified)**: Explicitly defines relationship keys and adds wrapped DEK pivot columns to the query
+- **__construct(EncryptionService $encryptionService)** (DocumentDecryptionService): Constructor injecting EncryptionService dependency
+- **decryptDocument(Document $document, string $userMasterKey): string**: Extracts encryption parameters from encrypted file, retrieves DEK based on encryption mode, decrypts content using AES-256-GCM
+- **getDocumentKeyForUser(Document $document, string $userMasterKey): string**: Retrieves and unwraps DEK for current authenticated user based on encryption mode
+- **store() (modified)**: Auto-logins user after registration, stores master key in session with 10-minute expiry, redirects to myDocuments instead of login page
+- **index() (modified)**: Adds `encryption_mode` to the document selection query
 
 ---
 
-## **Current State**
+## Commit: `40355e0` (feat: implement end-to-end document sharing feature)
 
-**Carrier files are stored locally:**
-- [`CarrierPoolController@store()`](app/Http/Controllers/Api/CarrierPoolController.php:85) uses `Storage::putFile('stego/carriers/' . $user->id, $file)` → `storage/app/stego/carriers/{userId}/`
-- [`ValidateCarrierJob`](app/Jobs/ValidateCarrierJob.php:57) uses `Storage::path()` to get absolute local path for validation
-- `file_path` stores relative paths like `stego/carriers/1/abc123.png`
-
-**Cloud infrastructure already exists:**
-- [`CloudStorageService`](app/Services/Stego/CloudStorageService.php:31) wraps `Storage::disk($diskName)` with configurable disk
-- Config: `stegolock.storage.disk` (defaults to `'local'`) — see [`config/stegolock.php`](config/stegolock.php:33-35)
-- Already used for **stego-encoded carriers** in [`StegoDocumentService`](app/Services/Stego/StegoDocumentService.php:255-256) — uploads to S3/B2
-- [`DownloadController`](app/Http/Controllers/DownloadController.php:52-57) handles both local streaming and cloud signed URL redirects
+- **index() (modified)**: Removes duplicate map closure for starred status calculation
+- **share() (modified)**: Uses fully qualified User model reference, removes merge conflict markers from docblock
+- **lock() (modified)**: Removes merge conflict markers in method docblock
+- **handleShare() (ShareFileModal modified)**: Replaces mock sharing logic with actual API call to `/documents/share`, adds error handling with toast notifications
+- **handleShare() (MyDocuments new)**: Manages share modal state by setting `selectedShareDoc`
+- **Star button (modified)**: Now calls `handleToggleStar` on click with dynamic fill color based on `is_starred` status
+- **Share button (modified)**: Now calls `handleShare` on click to open share modal
+- **up() (migration modified)**: Modifies `document_id` column to `unsignedBigInteger`, adds explicit foreign key constraint to `documents` table
 
 ---
 
-## **Required Changes**
+## Commit: `454f8ef` (feat: implement background cover scanning)
 
-### **1. Carrier upload** (1 hour)
-[`CarrierPoolController@store()`](app/Http/Controllers/Api/CarrierPoolController.php:85):
-```php
-$disk = config('stegolock.storage.disk', 'local');
-$path = Storage::disk($disk)->putFile('stego/carriers/' . $user->id, $file);
-```
-
-### **2. ValidateCarrierJob** (3-4 hours) ⚠️ **Critical**
-[`ValidateCarrierJob`](app/Jobs/ValidateCarrierJob.php:57) uses `Storage::path()` — **only works for local disk**. Must download cloud files to temp:
-
-```php
-$disk = Storage::disk(config('stegolock.storage.disk', 'local'));
-$content = $disk->get($carrier->file_path);
-if ($content === null) { /* error */ }
-
-$tmpPath = tempnam(sys_get_temp_dir(), 'carrier_') . '.' . $carrier->file_type;
-file_put_contents($tmpPath, $content);
-// ... validate using $tmpPath ...
-@unlink($tmpPath);
-```
-
-### **3. Carrier deletion** (30 min)
-[`CarrierPoolController@destroy()`](app/Http/Controllers/Api/CarrierPoolController.php:168):
-```php
-Storage::disk(config('stegolock.storage.disk', 'local'))->delete($carrier->file_path);
-```
-
-### **4. Carrier preview/download** (2-3 hours, if endpoints exist)
-- Local: `response()->file(Storage::path($path))`
-- Cloud: `redirect(Storage::disk('s3')->temporaryUrl($path, now()->addMinutes(15)))`
-
-### **5. Migration script** (1-2 hours, optional)
-One-time upload of existing `storage/app/stego/carriers/` files to cloud.
+- **scan_cover() (modified)**: Replaces inline scanning logic with dispatching `ScanCoversJob`, removes `scan_audio()`, `scan_text()`, and `generate_cover_text_file()` methods from controller
+- **generate_cover_text_file() (modified)**: Generates system-generated text covers using `wiki_feeds` data, standardizes file naming with hex timestamp format, adds `info: 'System-generated'` to metadata
+- **__construct() (ScanCoversJob)**: Job constructor (empty by default)
+- **handle() (ScanCoversJob)**: Executes job by calling `scan()` for audio, image, and text cover types sequentially
+- **scan(string $type, string $extension, string $folderName, string $scriptPath) (ScanCoversJob)**: Scans specific folder for candidate cover files by extension, processes each file via `processFile()`
+- **processFile(string $type, string $filePath, string $folderName, string $scriptPath) (ScanCoversJob)**: Validates file capacity via Python script, checks for duplicate hashes, renames files to standardized format, records valid covers in DB, moves invalid files to failed folder
 
 ---
 
-## **Configuration**
+## Commit: `eaf10e3` (feat: implement cache folder for covers)
 
-Already in [`config/stegolock.php`](config/stegolock.php:33-35):
-```php
-'storage' => ['disk' => env('STEGOLOCK_STORAGE_DISK', 'local')],
-```
-
-Set `.env`:
-```
-STEGOLOCK_STORAGE_DISK=s3
-```
+- **fetchCoverFiles(string $mapId) (modified)**: Adds dedicated cache path for covers, checks cache first before downloading from cloud storage, saves downloaded covers to cache for future reuse, creates cache directory if missing
+- **Upload button label (modified)**: Changes from "Processing ongoing..." to "Currently locking a file..." when a process is active
 
 ---
 
-## **Risk Assessment**
+## Commit: `e5d62f3` (feat: fixed LSB image embedding and capacity validation)
 
-| Area | Risk | Notes |
-|------|------|-------|
-| **ValidateCarrierJob** | **High** | Needs temp file for Python tools (PSNR, wav_validator) |
-| Carrier upload | Low | `disk()->putFile()` works identically |
-| Carrier delete | Low | `disk()->delete()` is disk-agnostic |
-| Existing data | Low | Can keep local; new uploads go to cloud; mixed operation fine |
-| Tests | Low | Unit tests mock storage; integration may need cloud config |
+- **get_png_embedding_capacity() (modified)**: Subtracts 9 bytes for `###END###` delimiter from usable bytes, returns `max(0, usable_bytes)` to avoid negative values
+- **get_image_safe_capacity() (modified)**: Detects image channels dynamically (RGB=3, RGBA=4) instead of hardcoding 3 channels, calculates total bits as `width * height * channels`
+- **embed() (modified)**: Supports both RGB and RGBA image modes, embeds data into LSB of all available channels, uses `img.load()` for efficient pixel iteration, breaks loops when data is fully embedded, removes unused pixel list conversion
 
 ---
 
-## **Estimated Effort**
+## Commit: `88fb894` (feat: enhanced storage with concurrent cloud upload up to 10 files in parallel)
 
-- Core migration (upload + validation + delete): **1 day**
-- Preview/download endpoints: **+0.5 day**
-- Migration script: **+0.5 day**
-- Testing: **0.5 day**
+- **embedFragments() (modified)**: Uses `B2Service::storeFilesBatch()` for concurrent uploads with 10 concurrency limit, uses callback to track uploaded files, cleans up local stego files after successful upload
+- **storeFilesBatch(array $filePaths, int $concurrency = 5, ?callable $onProgress = null) (B2Service)**: Uploads multiple files concurrently using Guzzle Pool, pre-fetches multiple upload URLs for parallel uploads, returns array of upload results mapped by file path, triggers `onProgress` callback for each successful upload
 
-**Total: 2–3 days**
+---
 
-The heavy lifting (CloudStorageService, S3/B2 config) is already done. The main work is auditing every place that reads `carrier->file_path` and ensuring cloud compatibility — especially [`ValidateCarrierJob`](app/Jobs/ValidateCarrierJob.php) which must download to temp for external tools.
+## Commit: `f750cfd` (feat: implement folder management system with CRUD functionality)
 
-**Difficulty: Moderate (2–3 days)**
+- **index() (DocumentController modified)**: Fetches user's folders and passes to view, moves `$user` assignment before document query
+- **moveDocument(Request $request, $id)**: New method to move documents between folders, validates `folder_id`, checks folder ownership before updating
+- **index(Request $request) (FolderController)**: Fetches folders filtered by `parent_id` for hierarchical navigation
+- **store(Request $request) (FolderController)**: Creates new folder with validation
+- **update(Request $request, $id) (FolderController)**: Renames existing folder
+- **destroy($id) (FolderController)**: Deletes folder and moves contained items to root directory
+- **handleMove() (MyDocuments)**: Handles document movement to selected folder via API call
+- **openCreateModal()/openRenameModal()/openDeleteModal() (MyFolders)**: Manage modal visibility for folder CRUD operations
+- **submitCreate()/submitRename()/submitDelete() (MyFolders)**: Handle API calls for folder creation, renaming, and deletion with error handling
+- **formatDate()/formatDateTime() (fileUtils modified)**: Handle invalid date inputs by converting to Date object safely, return 'Invalid Date' for unparseable values
 
-Cloud infrastructure already exists (CloudStorageService, S3/B2 config, signed URLs). The main work is updating file access patterns:
+---
 
-**Required changes:**
-1. **Carrier upload** ([`CarrierPoolController@store()`](app/Http/Controllers/Api/CarrierPoolController.php:85)): Add `Storage::disk(config('stegolock.storage.disk'))->putFile()` — 1 hour
-2. **ValidateCarrierJob** ([`app/Jobs/ValidateCarrierJob.php`](app/Jobs/ValidateCarrierJob.php:57)): Replace `Storage::path()` with `Storage::disk()->get()` + write to temp file for Python tools — 3-4 hours (critical)
-3. **Carrier deletion** ([`CarrierPoolController@destroy()`](app/Http/Controllers/Api/CarrierPoolController.php:168)): Specify disk — 30 min
-4. **Carrier preview/download** (if endpoints exist): Add cloud-aware response with signed URLs — 2-3 hours
-5. **Migration script** (optional): Upload existing local carriers to cloud — 1-2 hours
+## Commit: `e27e369` (feat: add starred document functionality)
 
-**Configuration already present:**
-- `config/stegolock.php` has `'storage' => ['disk' => env('STEGOLOCK_STORAGE_DISK', 'local')]`
-- Set `STEGOLOCK_STORAGE_DISK=s3` in `.env`
+- **index() (StarredController)**: Fetches starred documents for authenticated user, passes to StarredDocuments view
+- **toggleStar(Request $request) (StarredController)**: Toggles `is_starred` status for a document, validates document ownership, returns JSON response with updated status
+- **handleToggleStar() (MyDocuments modified)**: Toggles star status via API, updates local state, shows toast notifications
+- **handleToggleStar() (StarredDocuments)**: Toggles star status, removes unstarred documents from the view immediately
+- **Polling logic (StarredDocuments)**: Polls for processing document status every 2 seconds
+- **getStatusDisplay()/getStatusColor()/getFileColor() (StarredDocuments)**: Return human-readable status text, status badge colors, and file type icon colors respectively
 
-**Key risk:** [`ValidateCarrierJob`](app/Jobs/ValidateCarrierJob.php) uses `Storage::path()` which fails for cloud disks. Must download to temp file before running Python validation tools (PSNR, wav_validator). This is the only significant blocker.
+---
+
+## Commit: `3b643e4` (fix: delete function to handle failed/errored documents)
+
+- **delete(Request $request) (modified)**: Expands deletable statuses to include intermediate processing states (`uploaded`, `encrypted`, `fragmented`, `mapped`, `embedded`), restructures deletion into layered steps (cloud deletion, storage cleanup, local cleanup, DB deletion)
+- **deleteWithRetry($b2, $file) (modified)**: Adds logging for retry failures, improves backoff logic to only sleep between retries (not after last attempt)
+- **cleanupOnFailure(int $documentId) (modified)**: Comments out database and cloud storage cleanup (per user request to keep records for manual deletion), retains local temp file cleanup
+- **embedFragments() (modified)**: Sets StegoMap status to `pending` initially, creates StegoFile records incrementally during upload, updates storage tracking per file, marks StegoMap as `completed` after full batch upload
+
+---
+
+## Commit: `e5f22a4` (fix: storage_used consistency across pages)
+
+- **index() (DocumentController modified)**: Calls `$user->refreshStorageUsed()` to recalculate storage before loading documents
+- **delete(Request $request) (modified)**: Replaces manual storage decrement with `$user->refreshStorageUsed()` to recalculate from all documents
+- **embedFragments() (modified)**: Removes manual `$user->increment('storage_used')`, adds `$user->refreshStorageUsed()` after batch upload
+- **documents() (User model)**: Defines `hasMany` relationship to Document model
+- **refreshStorageUsed() (User model)**: Recalculates and updates `storage_used` column by summing `in_cloud_size` of all user's documents
+
+---
+
+## Commit: `b6cbcf5` (feat: implement landing page with hero section)
+
+- **Welcome component (complete rewrite)**: Removes default Laravel welcome page logic, integrates `DecorativeBackground` component, implements hero section with gradient text and CTA buttons, adds "How it Works" section with 3 feature cards (AES-GCM Encryption, Intelligent Segmentation, Stegano-Embedding), adds "Study Objectives" and "Primary Beneficiaries" sections, implements Call to Action section with gradient background, adds footer with quick links, technologies list, and social icons, includes custom CSS animations (fade-in, float, bounce-slow) via inline styles
+
+---
+
+## Commit: `80de4a5` (feat: implement document sharing system fix: folder content view fix: other visuals)
+
+- **index() (modified)**: Adds `encryption_mode` field to document queries for sharing system
+- **share() (modified)**: Implements complete document sharing with permission handling
+- **moveDocument() (modified)**: Enhanced to handle folder content view updates
+- **FolderController methods (modified)**: Updated to fix folder content display issues
+
+---
+
+

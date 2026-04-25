@@ -1,5 +1,5 @@
 ﻿import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import {
     FileText,
@@ -14,6 +14,7 @@ import {
     Unlock,
 } from 'lucide-react';
 import FileInfoModal, { FileInfoDocument } from '@/Components/FileInfoModal';
+import ShareModal from '@/Components/ShareModal';
 import SecurityPanel from '@/Components/SecurityPanel';
 import { formatFileSize } from '@/utils/fileSize';
 import type { PageProps } from '@/types';
@@ -32,7 +33,7 @@ type MyDocumentsProps = PageProps & {
     storageLimit?: number;
 };
 
-export default function MyDocuments({ auth, documents }: MyDocumentsProps) {
+export default function MyDocuments({ auth, documents, folders = [] }: MyDocumentsProps) {
     const menuRef = useRef<HTMLDivElement | null>(null);
     const [openMenuId, setOpenMenuId] = useState<number | null>(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -40,6 +41,11 @@ export default function MyDocuments({ auth, documents }: MyDocumentsProps) {
     const [showKeepFileModal, setShowKeepFileModal] = useState<number | null>(null);
     const [selectedInfo, setSelectedInfo] = useState<FileInfoDocument | null>(null);
     const [showInfo, setShowInfo] = useState(false);
+    const [showMoveModal, setShowMoveModal] = useState(false);
+    const [selectedMoveDoc, setSelectedMoveDoc] = useState<number | null>(null);
+    const [selectedFolderId, setSelectedFolderId] = useState<string>('');
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [selectedShareDoc, setSelectedShareDoc] = useState<number | null>(null);
 
     const getDocId = (document: MyDocumentCard) => document.document_id ?? document.id;
 
@@ -109,6 +115,33 @@ export default function MyDocuments({ auth, documents }: MyDocumentsProps) {
             openDeleteModal(showKeepFileModal);
         }
         setShowKeepFileModal(null);
+    };
+
+    const handleMove = (id: number) => {
+        setSelectedMoveDoc(id);
+        setShowMoveModal(true);
+        setOpenMenuId(null);
+    };
+
+    const confirmMove = () => {
+        if (!selectedMoveDoc || !selectedFolderId) {
+            return;
+        }
+        router.put(`/documents/${selectedMoveDoc}/move`, {
+            folder_id: selectedFolderId === 'root' ? null : selectedFolderId,
+        }, {
+            onSuccess: () => {
+                setShowMoveModal(false);
+                setSelectedMoveDoc(null);
+                setSelectedFolderId('');
+            },
+        });
+    };
+
+    const handleShare = (id: number) => {
+        setSelectedShareDoc(id);
+        setShowShareModal(true);
+        setOpenMenuId(null);
     };
 
     useEffect(() => {
@@ -210,6 +243,7 @@ export default function MyDocuments({ auth, documents }: MyDocumentsProps) {
 
                                                 <button
                                                     type="button"
+                                                    onClick={() => handleMove(id)}
                                                     className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50"
                                                 >
                                                     <FolderInput className="h-4 w-4 text-gray-600" />
@@ -220,6 +254,7 @@ export default function MyDocuments({ auth, documents }: MyDocumentsProps) {
 
                                                 <button
                                                     type="button"
+                                                    onClick={() => handleShare(id)}
                                                     className="flex w-full items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50"
                                                 >
                                                     <Share2 className="h-4 w-4 text-gray-600" />
@@ -338,6 +373,61 @@ export default function MyDocuments({ auth, documents }: MyDocumentsProps) {
                     onClose={() => setShowInfo(false)}
                     currentUserEmail={auth.user.email}
                 />
+
+                {showMoveModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowMoveModal(false)}>
+                        <div className="w-96 rounded-xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
+                            <h2 className="mb-4 text-lg font-semibold text-gray-800">Move Document</h2>
+
+                            <p className="mb-4 text-sm text-gray-500">
+                                Select a folder to move the document to:
+                            </p>
+
+                            <select
+                                className="mb-6 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                value={selectedFolderId}
+                                onChange={(e) => setSelectedFolderId(e.target.value)}
+                            >
+                                <option value="root">— Root (No Folder) —</option>
+                                {folders.map((folder) => (
+                                    <option key={folder.id} value={folder.id}>{folder.name}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMoveModal(false)}
+                                    className="rounded-md bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
+                                >
+                                    Cancel
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={confirmMove}
+                                    disabled={!selectedFolderId}
+                                    className="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    Move
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {showShareModal && selectedShareDoc && (
+                    <ShareModal
+                        show={showShareModal}
+                        onClose={() => {
+                            setShowShareModal(false);
+                            setSelectedShareDoc(null);
+                        }}
+                        documentId={selectedShareDoc}
+                        documentName={documents.find(d => (d.document_id ?? d.id) === selectedShareDoc)?.name ?? 'Document'}
+                        slug="document"
+                    />
+                )}
             </div>
         </AuthenticatedLayout>
     );

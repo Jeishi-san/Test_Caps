@@ -291,7 +291,7 @@ Route::get('/stego-app/{any?}', fn () => view('stegolock'))
 
 // Share Documents Route (public)
 Route::get('/{slug?}/share/{id?}/{token?}', [ShareDocumentController::class, 'getSharedDocuments'])->name('getSharedDocuments');
-Route::post('/share-document', [ShareDocumentController::class, 'sharedDocuments'])->name('sharedDocuments');
+Route::post('/share-document', [ShareDocumentController::class, 'share'])->name('sharedDocuments');
 
 Route::post('/debug-upload', function (Illuminate\Http\Request $request) {
     \Illuminate\Support\Facades\Log::info('Debug upload request:', [

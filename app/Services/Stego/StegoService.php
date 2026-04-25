@@ -401,6 +401,15 @@ class StegoService
     // -------------------------------------------------------------------------
 
     /**
+     * Detect number of color channels in an image (3 for RGB, 4 for RGBA).
+     */
+    private function detectChannels(GdImage $image): int
+    {
+        // Check if image supports alpha channel
+        return (imageistruecolor($image) && imagecolortransparent($image) === -1) ? 4 : 3;
+    }
+
+    /**
      * Embed data into image pixels using LSB substitution (PHP GD).
      * The payload length (4 bytes, big-endian) is stored first, followed by data bits.
      */
@@ -411,19 +420,23 @@ class StegoService
         $width  = imagesx($image);
         $height = imagesy($image);
         $pixels = $width * $height;
+        $channels = $this->detectChannels($image);
 
         // Prepend 4-byte big-endian length header to the payload.
-        $payload = pack('N', strlen($data)) . $data;
+        // Add ###END### delimiter (9 bytes) to mark end of data for reliable extraction.
+        $delimiter = '###END###';
+        $payload = pack('N', strlen($data) + strlen($delimiter)) . $data . $delimiter;
         $bits    = $this->bytesToBits($payload);
         $bitCount = count($bits);
 
         // Apply safety buffer: 90% of actual capacity to prevent edge case failures
-        $maxBits = (int) ($pixels * 3 * 0.9);
+        // Subtract delimiter bytes from usable capacity
+        $maxBits = (int) ($pixels * $channels * 0.9);
 
         if ($bitCount > $maxBits) {
             imagedestroy($image);
             throw new Exception(
-                "Payload too large for carrier. Need {$bitCount} bits, capacity is " . ($pixels * 3) . " bits."
+                "Payload too large for carrier. Need {$bitCount} bits, capacity is " . ($pixels * $channels) . " bits."
             );
         }
 
@@ -437,6 +450,7 @@ class StegoService
                 $r = ($pixel >> 16) & 0xFF;
                 $g = ($pixel >> 8)  & 0xFF;
                 $b = $pixel         & 0xFF;
+                $a = ($pixel >> 24) & 0xFF; // Alpha channel (if present)
 
                 if ($bitIndex < $bitCount) {
                     $r = ($r & 0xFE) | $bits[$bitIndex++];
@@ -447,8 +461,12 @@ class StegoService
                 if ($bitIndex < $bitCount) {
                     $b = ($b & 0xFE) | $bits[$bitIndex++];
                 }
+                // Embed in alpha channel if image supports it (RGBA)
+                if ($channels === 4 && $bitIndex < $bitCount) {
+                    $a = ($a & 0xFE) | $bits[$bitIndex++];
+                }
 
-                imagesetpixel($image, $x, $y, imagecolorallocate($image, $r, $g, $b));
+                imagesetpixel($image, $x, $y, imagecolorallocatealpha($image, $r, $g, $b, $a));
             }
         }
 

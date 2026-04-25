@@ -155,8 +155,8 @@ export default function Index({ auth, folders }: FoldersIndexProps) {
     };
 
     const handleDelete = (id: number, name: string) => {
-        if (!confirm(`Delete folder "${name}" and all its contents? This cannot be undone.`)) return;
-        router.post('/folders/delete', { folder_ids: [id] }, { preserveState: false });
+        if (!confirm(`Delete folder "${name}"? Documents will be moved to root. This cannot be undone.`)) return;
+        router.delete(`/folders/${id}`, { preserveState: false });
     };
 
     // Flatten for parent selector

@@ -29,6 +29,9 @@ class DocumentController extends Controller
     {
         $user = Auth::user();
         
+        // Refresh storage used for accurate tracking
+        $user->refreshStorageUsed();
+        
         // Get all documents the user has permission to view using optimized scope
         $documents = Document::with('tags')
             ->accessibleBy($user)
@@ -246,6 +249,10 @@ class DocumentController extends Controller
         
         // Delete database record
         $document->delete();
+        
+        // Refresh storage used for accurate tracking
+        $user = Auth::user();
+        $user->refreshStorageUsed();
 
         return response()->json(['message' => 'Document deleted successfully']);
     }
@@ -293,5 +300,24 @@ class DocumentController extends Controller
             'message' => $document->is_starred ? 'Document starred successfully' : 'Document unstarred successfully',
             'is_starred' => $document->is_starred,
         ]);
+    }
+
+    public function moveDocument(Request $request, $id)
+    {
+        $document = Document::findOrFail($id);
+        $this->authorize('update', $document);
+
+        $request->validate(['folder_id' => 'nullable|exists:folders,id']);
+
+        // Verify folder ownership if folder_id is provided
+        if ($request->folder_id) {
+            $folder = Folder::findOrFail($request->folder_id);
+            if ($folder->user_id !== Auth::id()) {
+                abort(403);
+            }
+        }
+
+        $document->update(['folder_id' => $request->folder_id]);
+        return response()->json(['message' => 'Document moved']);
     }
 }

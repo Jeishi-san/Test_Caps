@@ -48,7 +48,7 @@ class ShareDocumentController extends Controller
     }
 
 
-    public function sharedDocuments(StoreShareDocumentRequest $request)
+    public function share(StoreShareDocumentRequest $request)
     {
         $validated = $request->validated();
 

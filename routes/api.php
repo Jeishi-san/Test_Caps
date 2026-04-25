@@ -232,7 +232,7 @@ Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
      // Collaboration and sharing endpoints
      Route::prefix('collaboration')->name('api.collaboration.')->group(function () {
          // Share management
-         Route::post('/shares', [\App\Http\Controllers\ShareDocumentController::class, 'sharedDocuments'])
+         Route::post('/shares', [\App\Http\Controllers\ShareDocumentController::class, 'share'])
              ->name('shares.create');
          Route::put('/shares/{id}/permissions', [\App\Http\Controllers\ShareDocumentController::class, 'updatePermissions'])
              ->name('shares.permissions.update');

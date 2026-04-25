@@ -6,6 +6,7 @@ use ZipArchive;
 use App\Models\Folder;
 use Illuminate\Http\Request;
 use App\Http\Requests\StoreFolderRequest;
+use App\Http\Requests\UpdateFolderRequest;
 use App\Services\FolderService;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -128,6 +129,24 @@ class FolderController extends Controller
         return $this->deleteSelectedFolder($request);
     }
 
+    public function update(UpdateFolderRequest $request, $id)
+    {
+        $folder = Folder::findOrFail($id);
+        $this->authorize('update', $folder);
+        $folder->update($request->validated());
+        return response()->json(['message' => 'Folder renamed successfully']);
+    }
+
+    public function destroy($id)
+    {
+        $folder = Folder::findOrFail($id);
+        $this->authorize('delete', $folder);
+        // Move documents to root before deleting folder
+        $folder->documents()->update(['folder_id' => null]);
+        $folder->delete();
+        return response()->json(['message' => 'Folder deleted']);
+    }
+
     public function deleteSelectedFolder(Request $request)
     {
         $validated = $request->validate([
@@ -138,6 +157,8 @@ class FolderController extends Controller
         $folders = Folder::whereIn('id', $validated['folder_ids'])->get();
 
         foreach ($folders as $folder) {
+            // Move documents to root before deleting folder
+            $folder->documents()->update(['folder_id' => null]);
             $folder->deleteFolder();
         }
 
@@ -145,7 +166,7 @@ class FolderController extends Controller
             return redirect()->route('folders.index');
         }
 
-        return response()->json(['html' =>  $this->getParentFolders(), 'message' => 'Folder and its related records deleted successfully'], 200);
+        return response()->json(['html' => $this->getParentFolders(), 'message' => 'Folder and its related records deleted successfully'], 200);
     }
 
 

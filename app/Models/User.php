@@ -26,6 +26,7 @@ class User extends Authenticatable
         'role',
         'active',
         'mkd_salt',   // PBKDF2 salt for Master Key Derivation — generated at registration
+        'storage_used',   // Track total storage used by user
     ];
 
     /**
@@ -68,6 +69,21 @@ class User extends Authenticatable
     public function stegoDocuments()
     {
         return $this->hasMany(StegoDocument::class);
+    }
+
+    // -------------------------------------------------------------------------
+    // Document relationships
+    // -------------------------------------------------------------------------
+
+    public function documents()
+    {
+        return $this->hasMany(Document::class, 'owner_id');
+    }
+
+    public function refreshStorageUsed(): void
+    {
+        $this->storage_used = $this->documents()->sum('size');
+        $this->saveQuietly();
     }
 
     // -------------------------------------------------------------------------
