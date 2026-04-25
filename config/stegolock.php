@@ -201,4 +201,22 @@ return [
         'minimum_carriers'      => env('STEGO_MINIMUM_CARRIERS', 1),       // at least M total carriers
     ],
 
-    ];
+    /*
+    |--------------------------------------------------------------------------
+    | Key Management Policy
+    |--------------------------------------------------------------------------
+    |
+    | Settings for password strength requirements and key rotation.
+    |
+    */
+
+    'key_management' => [
+        'mk_min_length' => (int) env('STEGOLOCK_MK_MIN_LENGTH', 8),
+        'mk_require_uppercase' => (bool) env('STEGOLOCK_MK_REQUIRE_UPPERCASE', true),
+        'mk_require_number' => (bool) env('STEGOLOCK_MK_REQUIRE_NUMBER', true),
+        'mk_require_special' => (bool) env('STEGOLOCK_MK_REQUIRE_SPECIAL', true),
+        'key_rotation_enabled' => (bool) env('STEGOLOCK_KEY_ROTATION_ENABLED', false),
+        'key_rotation_interval_days' => (int) env('STEGOLOCK_KEY_ROTATION_INTERVAL_DAYS', 90),
+    ],
+
+];

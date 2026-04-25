@@ -8,8 +8,12 @@ use App\Http\Controllers\Api\DocumentController as ApiDocumentController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\StegoDocumentController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\Admin\FragmentController;
 use App\Http\Controllers\DocumentFileController;
+use App\Http\Controllers\Api\Admin\ActivityLogController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Api\Admin\EncryptionPolicyController;
+use App\Http\Controllers\Api\Admin\KeyManagementController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -212,8 +216,12 @@ Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
 
     // User management endpoints
     Route::get('/users', [UserController::class, 'index'])->name('api.users.index');
+    Route::post('/users', [UserController::class, 'store'])->name('api.users.store');
+    Route::put('/users/{id}', [UserController::class, 'update'])->name('api.users.update')->whereNumber('id');
+    Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('api.users.destroy')->whereNumber('id');
     Route::put('/users/{id}/role', [UserController::class, 'updateRole'])->name('api.users.updateRole')->whereNumber('id');
     Route::get('/users/search', [\App\Http\Controllers\UserController::class, 'search'])->name('api.users.search');
+    Route::get('/admins', [UserController::class, 'listAdmins'])->name('api.users.admins');
 
     // Dashboard stats / recent (for SPA)
     Route::prefix('dashboard')->group(function () {
@@ -246,6 +254,16 @@ Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
          Route::post('/{notification}/dismiss', [NotificationController::class, 'dismiss'])
              ->whereNumber('notification')
              ->name('dismiss');
+     });
+ 
+     // Admin endpoints
+     Route::prefix('admin')->name('api.admin.')->group(function () {
+         Route::get('/fragments', [FragmentController::class, 'index'])->name('fragments.index');
+         Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+         Route::get('/encryption-policy', [EncryptionPolicyController::class, 'index'])->name('encryption-policy.index');
+         Route::put('/encryption-policy', [EncryptionPolicyController::class, 'update'])->name('encryption-policy.update');
+         Route::get('/key-management', [KeyManagementController::class, 'index'])->name('key-management.index');
+         Route::put('/key-management', [KeyManagementController::class, 'update'])->name('key-management.update');
      });
 
  });

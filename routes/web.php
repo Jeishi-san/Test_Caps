@@ -106,16 +106,33 @@ Route::middleware('auth')->group(function () {
         ]);
     };
 
-    Route::get('/admin/users', fn () => $adminSection('Users', 'Review and manage user accounts across the system.'))->name('admin.users');
-    Route::get('/admin/fragments', fn () => $adminSection('Fragment Monitoring', 'Inspect fragment storage, integrity, and rebuild activity.'))->name('admin.fragments');
-    Route::get('/admin/activity', fn () => $adminSection('Activity Logs', 'Audit notable administrative and system events.'))->name('admin.activity');
-    Route::get('/admin/incidents', fn () => $adminSection('Incidents', 'Track degraded services, security incidents, and recovery progress.'))->name('admin.incidents');
-    Route::get('/admin/admin-management', fn () => $adminSection('Admin Management', 'Promote, revoke, and review privileged operators.'))->name('admin.management');
-    Route::get('/admin/encryption-policy', fn () => $adminSection('Encryption Policy', 'Tune encryption defaults and key-handling rules.'))->name('admin.encryption-policy');
-    Route::get('/admin/key-management', fn () => $adminSection('Key Management Policy', 'Rotate and review the key lifecycle controls.'))->name('admin.key-management');
-    Route::get('/admin/storage', fn () => $adminSection('Storage Configuration', 'Review storage usage limits and backend policy.'))->name('admin.storage');
-    Route::get('/admin/system', fn () => $adminSection('System Configuration', 'Adjust operational settings for the platform.'))->name('admin.system');
-    Route::get('/admin/disaster-recovery', fn () => $adminSection('Disaster Recovery', 'Define backup, recovery, and failover procedures.'))->name('admin.disaster-recovery');
+    Route::get('/admin/users', function () use ($adminGate) {
+        $adminGate();
+        return Inertia::render('Admin/Users');
+    })->name('admin.users');
+    Route::get('/admin/fragments', function () use ($adminGate) {
+        $adminGate();
+        return Inertia::render('Admin/Fragments');
+    })->name('admin.fragments');
+    Route::get('/admin/activity', function () use ($adminGate) {
+        $adminGate();
+        return Inertia::render('Admin/Activity');
+    })->name('admin.activity');
+    Route::get('/admin/admin-management', function () use ($adminGate) {
+        $adminGate();
+        // Restrict to superadmin/owner only
+        $user = Auth::user();
+        abort_unless($user && ($user->role === 'owner' || $user->role === 'superadmin'), 403);
+        return Inertia::render('Admin/AdminManagement');
+    })->name('admin.management');
+    Route::get('/admin/encryption-policy', function () use ($adminGate) {
+        $adminGate();
+        return Inertia::render('Admin/EncryptionPolicy');
+    })->name('admin.encryption-policy');
+    Route::get('/admin/key-management', function () use ($adminGate) {
+        $adminGate();
+        return Inertia::render('Admin/KeyManagement');
+    })->name('admin.key-management');
 
     Route::get('/my-documents', function () {
         $user = Auth::user();

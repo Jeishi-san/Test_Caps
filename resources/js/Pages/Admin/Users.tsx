@@ -1,39 +1,87 @@
 import AdminLayout from '@/Admin/AdminLayout';
 import { Head } from '@inertiajs/react';
 import { UserPlus, Search, ChevronDown, Pencil, Trash2, Shield, UserCog } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import CreateUserModal from '@/Admin/components/CreateUserModal';
+import axios from 'axios';
 
 type User = {
     id: number;
     name: string;
     email: string;
-    role: 'user' | 'admin' | 'superadmin';
-    status: 'active' | 'inactive' | 'suspended';
-    lastActive: string;
-    avatar?: string;
+    role: 'user' | 'admin' | 'owner';
+    active: boolean;
+    created_at: string;
 };
 
-const mockUsers: User[] = [
-    { id: 1, name: 'John Doe', email: 'john@example.com', role: 'superadmin', status: 'active', lastActive: '2 minutes ago' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', role: 'admin', status: 'active', lastActive: '1 hour ago' },
-    { id: 3, name: 'Bob Wilson', email: 'bob@example.com', role: 'user', status: 'inactive', lastActive: '3 days ago' },
-    { id: 4, name: 'Alice Brown', email: 'alice@example.com', role: 'user', status: 'active', lastActive: '5 minutes ago' },
-    { id: 5, name: 'Charlie Davis', email: 'charlie@example.com', role: 'user', status: 'suspended', lastActive: '2 weeks ago' },
-];
-
-const statusFilters = ['All Statuses', 'Active', 'Inactive', 'Suspended'];
+const statusFilters = ['All', 'Active', 'Inactive'];
 
 export default function Users() {
+    const [users, setUsers] = useState<User[]>([]);
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('All Statuses');
+    const [statusFilter, setStatusFilter] = useState('All');
     const [showStatusDropdown, setShowStatusDropdown] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    // Fetch users from API
+    const fetchUsers = async () => {
+        setLoading(true);
+        try {
+            const params: any = {};
+            if (search) params.search = search;
+            if (statusFilter !== 'All') params.status = statusFilter.toLowerCase();
+            
+            const response = await axios.get('/api/users', { params });
+            setUsers(response.data);
+        } catch (error) {
+            console.error('Failed to fetch users:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchUsers();
+    }, [search, statusFilter]);
+
+    const handleCreateUser = async (userData: { 
+        name: string; 
+        email: string; 
+        password: string; 
+        role?: string;
+        status?: string;
+    }) => {
+        try {
+            const payload = {
+                ...userData,
+                active: userData.status !== 'inactive' // Map status to boolean (only 'inactive' maps to false)
+            };
+            await axios.post('/api/users', payload);
+            setShowCreateModal(false);
+            fetchUsers(); // Refresh list
+        } catch (error: any) {
+            console.error('Failed to create user:', error.response?.data);
+            alert(error.response?.data?.message || 'Failed to create user');
+        }
+    };
+
+    const handleDeleteUser = async (userId: number) => {
+        if (!confirm('Are you sure you want to delete this user?')) return;
+        
+        try {
+            await axios.delete(`/api/users/${userId}`);
+            fetchUsers(); // Refresh list
+        } catch (error: any) {
+            console.error('Failed to delete user:', error.response?.data);
+            alert(error.response?.data?.message || 'Failed to delete user');
+        }
+    };
 
     const getRoleBadge = (role: string) => {
         switch (role) {
-            case 'superadmin':
-                return <span className="inline-flex items-center gap-1 rounded-md border border-red-600/30 bg-red-600/20 px-2 py-1 text-xs font-medium text-red-400"><Shield className="size-3" /> SUPERADMIN</span>;
+            case 'owner':
+                return <span className="inline-flex items-center gap-1 rounded-md border border-red-600/30 bg-red-600/20 px-2 py-1 text-xs font-medium text-red-400"><Shield className="size-3" /> OWNER</span>;
             case 'admin':
                 return <span className="inline-flex items-center gap-1 rounded-md border border-blue-600/30 bg-blue-600/20 px-2 py-1 text-xs font-medium text-blue-400"><UserCog className="size-3" /> ADMIN</span>;
             default:
@@ -41,24 +89,13 @@ export default function Users() {
         }
     };
 
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'active':
-                return <span className="inline-flex items-center gap-2 rounded-md border border-green-600/30 bg-green-600/20 px-2 py-1 text-xs font-medium text-green-400"><span className="size-1.5 rounded-full bg-green-500" /> Active</span>;
-            case 'inactive':
-                return <span className="inline-flex items-center gap-2 rounded-md border border-slate-600/30 bg-slate-600/20 px-2 py-1 text-xs font-medium text-slate-400"><span className="size-1.5 rounded-full bg-slate-500" /> Inactive</span>;
-            case 'suspended':
-                return <span className="inline-flex items-center gap-2 rounded-md border border-red-600/30 bg-red-600/20 px-2 py-1 text-xs font-medium text-red-400"><span className="size-1.5 rounded-full bg-red-500" /> Suspended</span>;
-            default:
-                return null;
+    const getStatusBadge = (active: boolean) => {
+        if (active) {
+            return <span className="inline-flex items-center gap-2 rounded-md border border-green-600/30 bg-green-600/20 px-2 py-1 text-xs font-medium text-green-400"><span className="size-1.5 rounded-full bg-green-500" /> Active</span>;
+        } else {
+            return <span className="inline-flex items-center gap-2 rounded-md border border-slate-600/30 bg-slate-600/20 px-2 py-1 text-xs font-medium text-slate-400"><span className="size-1.5 rounded-full bg-slate-500" /> Inactive</span>;
         }
     };
-
-    const filteredUsers = mockUsers.filter((user) => {
-        const matchesSearch = user.name.toLowerCase().includes(search.toLowerCase()) || user.email.toLowerCase().includes(search.toLowerCase());
-        const matchesStatus = statusFilter === 'All Statuses' || user.status.toLowerCase() === statusFilter.toLowerCase();
-        return matchesSearch && matchesStatus;
-    });
 
     return (
         <AdminLayout>
@@ -129,45 +166,57 @@ export default function Users() {
                         <div className="col-span-4 text-xs font-semibold text-slate-400 uppercase">User</div>
                         <div className="col-span-2 text-xs font-semibold text-slate-400 uppercase">Role</div>
                         <div className="col-span-2 text-xs font-semibold text-slate-400 uppercase">Status</div>
-                        <div className="col-span-3 text-xs font-semibold text-slate-400 uppercase">Last Active</div>
+                        <div className="col-span-3 text-xs font-semibold text-slate-400 uppercase">Created At</div>
                         <div className="col-span-1 text-xs font-semibold text-slate-400 uppercase">Actions</div>
                     </div>
 
                     {/* Data Rows */}
-                    <div className="divide-y divide-slate-800">
-                        {filteredUsers.map((user) => (
-                            <div key={user.id} className="grid grid-cols-12 items-center gap-4 px-6 py-4 transition hover:bg-slate-800/30">
-                                <div className="col-span-4 flex items-center gap-3">
-                                    <div className="flex size-10 items-center justify-center rounded-lg bg-slate-800 text-sm font-medium text-slate-300">
-                                        {user.avatar ? (
-                                            <img src={user.avatar} alt={user.name} className="size-10 rounded-lg" />
-                                        ) : (
-                                            user.name.charAt(0).toUpperCase()
-                                        )}
+                    {loading ? (
+                        <div className="px-6 py-8 text-center text-sm text-slate-400">Loading users...</div>
+                    ) : (
+                        <div className="divide-y divide-slate-800">
+                            {users.map((user) => (
+                                <div key={user.id} className="grid grid-cols-12 items-center gap-4 px-6 py-4 transition hover:bg-slate-800/30">
+                                    <div className="col-span-4 flex items-center gap-3">
+                                        <div className="flex size-10 items-center justify-center rounded-lg bg-slate-800 text-sm font-medium text-slate-300">
+                                            {user.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-white">{user.name}</p>
+                                            <p className="text-xs text-slate-500">{user.email}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-white">{user.name}</p>
-                                        <p className="text-xs text-slate-500">{user.email}</p>
+                                    <div className="col-span-2">{getRoleBadge(user.role)}</div>
+                                    <div className="col-span-2">{getStatusBadge(user.active)}</div>
+                                    <div className="col-span-3 text-sm text-slate-500">
+                                        {new Date(user.created_at).toLocaleDateString()}
+                                    </div>
+                                    <div className="col-span-1 flex items-center gap-2">
+                                        <button className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white">
+                                            <Pencil className="size-4" />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDeleteUser(user.id)}
+                                            className="rounded-lg p-2 text-slate-400 transition hover:bg-red-500/20 hover:text-red-400"
+                                        >
+                                            <Trash2 className="size-4" />
+                                        </button>
                                     </div>
                                 </div>
-                                <div className="col-span-2">{getRoleBadge(user.role)}</div>
-                                <div className="col-span-2">{getStatusBadge(user.status)}</div>
-                                <div className="col-span-3 text-sm text-slate-500">{user.lastActive}</div>
-                                <div className="col-span-1 flex items-center gap-2">
-                                    <button className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white">
-                                        <Pencil className="size-4" />
-                                    </button>
-                                    <button className="rounded-lg p-2 text-slate-400 transition hover:bg-red-500/20 hover:text-red-400">
-                                        <Trash2 className="size-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                            {users.length === 0 && (
+                                <div className="px-6 py-8 text-center text-sm text-slate-400">No users found</div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Create User Modal */}
-                <CreateUserModal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} />
+                <CreateUserModal 
+                    isOpen={showCreateModal} 
+                    onClose={() => setShowCreateModal(false)}
+                    onSubmit={handleCreateUser}
+                />
             </div>
         </AdminLayout>
     );

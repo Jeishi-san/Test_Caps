@@ -1,15 +1,11 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     Activity,
-    AlertTriangle,
-    Archive,
     Database,
-    HardDrive,
     Key,
     LayoutDashboard,
     Lock,
     LogOut,
-    Settings,
     UserCog,
     Users,
 } from 'lucide-react';
@@ -29,16 +25,12 @@ export default function AdminSidebar({ role, onLogout }: AdminSidebarProps) {
         { href: route('admin.users', undefined, false), icon: Users, label: 'Users', match: ['/admin/users'] },
         { href: route('admin.fragments', undefined, false), icon: Database, label: 'Fragment Monitoring', match: ['/admin/fragments'] },
         { href: route('admin.activity', undefined, false), icon: Activity, label: 'Activity Logs', match: ['/admin/activity'] },
-        { href: route('admin.incidents', undefined, false), icon: AlertTriangle, label: 'Incidents', match: ['/admin/incidents'] },
     ];
 
     const ownerNavItems = [
         { href: route('admin.management', undefined, false), icon: UserCog, label: 'Admin Management', match: ['/admin/admin-management'] },
         { href: route('admin.encryption-policy', undefined, false), icon: Lock, label: 'Encryption Policy', match: ['/admin/encryption-policy'] },
         { href: route('admin.key-management', undefined, false), icon: Key, label: 'Key Management Policy', match: ['/admin/key-management'] },
-        { href: route('admin.storage', undefined, false), icon: HardDrive, label: 'Storage Configuration', match: ['/admin/storage'] },
-        { href: route('admin.system', undefined, false), icon: Settings, label: 'System Configuration', match: ['/admin/system'] },
-        { href: route('admin.disaster-recovery', undefined, false), icon: Archive, label: 'Disaster Recovery', match: ['/admin/disaster-recovery'] },
     ];
 
     const isActive = (paths: string[]) => paths.some((path) => url === path || url.startsWith(`${path}/`));

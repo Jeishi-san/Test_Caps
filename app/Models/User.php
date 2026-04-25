@@ -24,6 +24,7 @@ class User extends Authenticatable
         'password',
         'avatar',
         'role',
+        'active',
         'mkd_salt',   // PBKDF2 salt for Master Key Derivation — generated at registration
     ];
 
@@ -80,6 +81,6 @@ class User extends Authenticatable
 
     public function isOwner(): bool
     {
-        return $this->role === 'owner';
+        return $this->role === 'superadmin';
     }
 }
