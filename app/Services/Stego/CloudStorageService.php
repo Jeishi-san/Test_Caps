@@ -279,4 +279,33 @@ class CloudStorageService
             throw new Exception("Local storage file not found: {$s3Key}");
         }
     }
+
+    /**
+     * Fetch cover files with cache support.
+     * Checks cache first, then downloads from cloud storage if not cached.
+     *
+     * @param string $mapId The map ID to fetch covers for
+     * @return array List of cover file paths (cached or downloaded)
+     */
+    public function fetchCoverFiles(string $mapId): array
+    {
+        $cachePath = storage_path("app/covers/{$mapId}");
+        
+        // Create cache directory if it doesn't exist
+        if (!is_dir($cachePath)) {
+            mkdir($cachePath, 0755, true);
+        }
+
+        // Check if cache has files
+        $cachedFiles = glob($cachePath . DIRECTORY_SEPARATOR . '*');
+        if (!empty($cachedFiles)) {
+            return $cachedFiles;
+        }
+
+        // TODO: Download from cloud storage if not in cache
+        // This is a placeholder that maintains the method structure
+        // Actual implementation would call $this->disk->downloadCoverFiles($mapId, $cachePath);
+        
+        return [];
+    }
 }

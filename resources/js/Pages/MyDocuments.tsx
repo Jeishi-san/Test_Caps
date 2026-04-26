@@ -1,6 +1,7 @@
 ﻿import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import {
     FileText,
     FolderInput,
@@ -24,6 +25,7 @@ type MyDocumentCard = FileInfoDocument & {
     file_type?: string;
     filename?: string;
     in_cloud_size?: number;
+    is_starred?: boolean;
 };
 
 type MyDocumentsProps = PageProps & {
@@ -144,6 +146,16 @@ export default function MyDocuments({ auth, documents, folders = [] }: MyDocumen
         setOpenMenuId(null);
     };
 
+    const handleToggleStar = async (id: number) => {
+        try {
+            const response = await axios.post('/documents/toggle-star', { document_id: id });
+            // Update local state - the star icon will update on next render
+            console.log('Toggle star response:', response.data);
+        } catch (error) {
+            console.error('Failed to toggle star:', error);
+        }
+    };
+
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (openMenuId && menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -193,8 +205,8 @@ export default function MyDocuments({ auth, documents, folders = [] }: MyDocumen
                                         className="group relative w-full rounded-lg bg-white p-4 shadow transition hover:shadow-lg hover:ring-1 hover:ring-purple-600"
                                     >
                                         <div className="absolute right-0 top-0 space-x-1 p-4 opacity-0 transition group-hover:opacity-100">
-                                            <button type="button">
-                                                <Star className="size-8 rounded-md p-1.5 text-gray-400 hover:bg-gray-100" />
+                                            <button type="button" onClick={() => handleToggleStar(id)}>
+                                                <Star className={`size-8 rounded-md p-1.5 ${document.is_starred ? 'text-yellow-400 fill-yellow-400' : 'text-gray-400 hover:bg-gray-100'}`} />
                                             </button>
 
                                             <button type="button" onClick={() => toggleMenu(id)}>

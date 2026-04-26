@@ -73,8 +73,12 @@ class ShareDocumentController extends Controller
 
         $shareDocument = ShareDocument::create($shareData);
 
-        // Shared links are download-only by default.
-        $shareDocument->setPermissionLevel(ShareDocument::PERMISSION_VIEWER);
+        // Set permission level from request or default to VIEWER
+        $permissionLevel = $request->input('permission_level', ShareDocument::PERMISSION_VIEWER);
+        if (!in_array($permissionLevel, [ShareDocument::PERMISSION_VIEWER, ShareDocument::PERMISSION_EDITOR])) {
+            $permissionLevel = ShareDocument::PERMISSION_VIEWER;
+        }
+        $shareDocument->setPermissionLevel($permissionLevel);
         $shareDocument->save();
 
         $recipientEmails = array_values(array_unique(array_filter((array) ($validated['recipient_emails'] ?? []))));

@@ -14,15 +14,29 @@
     }
 
     .orb-indigo {
-        @apply absolute w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply blur-xl opacity-70 animate-blob animation-delay-2000;
+        @apply absolute w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply blur-xl opacity-70 animate-blob;
+        animation-delay: 2000ms;
         top: -4rem;
         right: -4rem;
     }
 
     .orb-blue {
-        @apply absolute w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply blur-xl opacity-70 animate-blob animation-delay-4000;
+        @apply absolute w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply blur-xl opacity-70 animate-blob;
+        animation-delay: 4000ms;
         bottom: -4rem;
         left: -4rem;
+    }
+
+    .animation-delay-200 {
+        animation-delay: 200ms;
+    }
+
+    .animation-delay-400 {
+        animation-delay: 400ms;
+    }
+
+    .animation-delay-600 {
+        animation-delay: 600ms;
     }
 
     .circle-top-right {

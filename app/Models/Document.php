@@ -43,6 +43,8 @@ class Document extends Model
         'is_encrypted', 'enc_iv', 'enc_auth_tag', 'enc_dek_salt', 'enc_dek_iterations', 'enc_hash_sha256',
         // Document watcher fields
         'last_updated_at', 'last_updated_by_user_id',
+        // Encryption mode (legacy or envelope_wrapped)
+        'encryption_mode',
     ];
 
     protected function casts(): array
@@ -225,7 +227,7 @@ class Document extends Model
      */
     public function scopeSharedDirectlyWith($query, User $user)
     {
-        return $query->whereIn('id', function ($subq) {
+        return $query->whereIn('id', function ($subq) use ($user) {
             $subq->select('share_id')
                  ->from('share_documents')
                  ->where('user_id', $user->id)
@@ -240,7 +242,7 @@ class Document extends Model
      */
     public function scopeInSharedFolders($query, User $user)
     {
-        return $query->whereIn('folder_id', function ($subq) {
+        return $query->whereIn('folder_id', function ($subq) use ($user) {
             $subq->select('share_id')
                  ->from('share_documents')
                  ->where('user_id', $user->id)

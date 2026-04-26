@@ -244,6 +244,27 @@ class DocumentController extends Controller
             abort(403, 'You do not have permission to delete this document.');
         }
 
+        // Define deletable states (including intermediate processing states)
+        $deletableStates = ['uploaded', 'encrypted', 'fragmented', 'embedded', 'error', 'completed'];
+        
+        // If document is in an intermediate state, perform additional cleanup
+        if (in_array($document->ingest_status, $deletableStates)) {
+            // Cloud deletion - remove files from cloud storage
+            if (method_exists($document, 'deleteFromCloud')) {
+                try {
+                    $document->deleteFromCloud();
+                } catch (\Exception $e) {
+                    // Log error but continue with deletion
+                    \Illuminate\Support\Facades\Log::error('Failed to delete from cloud: ' . $e->getMessage());
+                }
+            }
+            
+            // Storage cleanup - remove local temp files
+            if (method_exists($document, 'cleanupLocalFiles')) {
+                $document->cleanupLocalFiles();
+            }
+        }
+
         // Delete physical file
         $document->deleteFile();
         

@@ -952,4 +952,18 @@ class StegoDocumentController extends Controller
         }
         return null;
     }
+
+    /**
+     * Dispatch background job to scan for cover files.
+     *
+     * @return JsonResponse
+     */
+    public function scan_cover(): JsonResponse
+    {
+        dispatch(new \App\Jobs\ScanCoversJob());
+        
+        return response()->json([
+            'message' => 'Cover scan job queued successfully',
+        ]);
+    }
 }

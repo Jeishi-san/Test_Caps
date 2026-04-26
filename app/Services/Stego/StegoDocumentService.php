@@ -811,4 +811,74 @@ class StegoDocumentService
 
         @rmdir($dir);
     }
+
+    /**
+     * Delete a file from cloud storage with retry logic.
+     *
+     * @param mixed $b2 The B2 service or cloud storage client
+     * @param mixed $file The file object or path to delete
+     * @param int $maxRetries Maximum number of retry attempts
+     * @return bool True if deletion successful, false otherwise
+     */
+    public function deleteWithRetry($b2, $file, int $maxRetries = 3): bool
+    {
+        $attempt = 0;
+        
+        while ($attempt < $maxRetries) {
+            try {
+                // Attempt to delete the file from cloud storage
+                if (method_exists($b2, 'deleteFile')) {
+                    $b2->deleteFile($file);
+                } elseif (method_exists($b2, 'delete')) {
+                    $b2->delete($file);
+                }
+                
+                return true;
+            } catch (Exception $e) {
+                $attempt++;
+                \Illuminate\Support\Facades\Log::warning("Delete attempt {$attempt} failed: " . $e->getMessage());
+                
+                if ($attempt < $maxRetries) {
+                    // Exponential backoff: 1s, 2s, 4s...
+                    sleep(pow(2, $attempt - 1));
+                }
+            }
+        }
+        
+        \Illuminate\Support\Facades\Log::error("Failed to delete file after {$maxRetries} attempts");
+        return false;
+    }
+
+    /**
+     * Clean up resources when document processing fails.
+     * Per user request: comments out database and cloud storage cleanup,
+     * retains local temp file cleanup.
+     *
+     * @param int $documentId The document ID to clean up
+     */
+    public function cleanupOnFailure(int $documentId): void
+    {
+        // Commented out: database cleanup
+        // $document = \App\Models\Document::find($documentId);
+        // if ($document) {
+        //     $document->delete();
+        // }
+
+        // Commented out: cloud storage cleanup
+        // if (method_exists($this, 'deleteFromCloud')) {
+        //     try {
+        //         $this->deleteFromCloud($documentId);
+        //     } catch (Exception $e) {
+        //         \Illuminate\Support\Facades\Log::error("Cloud cleanup failed: " . $e->getMessage());
+        //     }
+        // }
+
+        // Retain: local temp file cleanup
+        $tmpDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'stego_' . $documentId;
+        if (is_dir($tmpDir)) {
+            $this->cleanupDir($tmpDir);
+        }
+        
+        \Illuminate\Support\Facades\Log::info("Local cleanup completed for document {$documentId}");
+    }
 }

@@ -34,4 +34,23 @@ class StarredController extends Controller
             'starredFolders' => $starredFolders,
         ]);
     }
+
+    public function toggleStar(Request $request)
+    {
+        $request->validate([
+            'document_id' => 'required|exists:documents,id',
+        ]);
+
+        $document = Document::findOrFail($request->document_id);
+        $this->authorize('update', $document);
+
+        $document->update([
+            'is_starred' => !$document->is_starred,
+        ]);
+
+        return response()->json([
+            'message' => $document->is_starred ? 'Document starred' : 'Document unstarred',
+            'is_starred' => $document->is_starred,
+        ]);
+    }
 }

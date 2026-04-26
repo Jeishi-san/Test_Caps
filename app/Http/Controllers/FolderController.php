@@ -24,7 +24,7 @@ class FolderController extends Controller
         $user = Auth::user();
         
         // Get all folders the user has permission to view using optimized scope
-        $folders = Folder::with(['categories', 'subfolders.categories', 'subfolders.subfolders'])
+        $folders = Folder::with(['categories', 'subfolders.categories', 'subfolders.subfolders', 'documents'])
             ->whereNull('parent_id')
             ->accessibleBy($user)
             ->orderBy('position')
