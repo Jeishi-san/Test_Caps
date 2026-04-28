@@ -57,25 +57,28 @@ class UserPolicy
 
     /**
      * Determine whether the user can delete the model.
+     * Only superadmin can delete users.
      */
     public function delete(User $user, User $model): bool
     {
-        return $user->isAdmin();
+        return $user->isOwner(); // Only superadmin
     }
 
     /**
      * Determine whether the user can restore the model.
+     * Only superadmin can restore users.
      */
     public function restore(User $user, User $model): bool
     {
-        return $user->isAdmin();
+        return $user->isOwner(); // Only superadmin
     }
 
     /**
      * Determine whether the user can permanently delete the model.
+     * Only superadmin can force delete users.
      */
     public function forceDelete(User $user, User $model): bool
     {
-        return $user->isAdmin();
+        return $user->isOwner(); // Only superadmin
     }
 }

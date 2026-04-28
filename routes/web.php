@@ -84,7 +84,7 @@ Route::middleware('auth')->group(function () {
 Route::middleware('auth')->group(function () {
     $adminGate = function () {
         $user = Auth::user();
-        abort_unless($user && in_array($user->role, ['admin', 'owner'], true), 403);
+        abort_unless($user && in_array($user->role, ['admin', 'superadmin', 'owner'], true), 403);
     };
 
     Route::get('/admin', function () use ($adminGate) {

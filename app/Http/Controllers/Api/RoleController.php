@@ -14,7 +14,7 @@ class RoleController extends Controller
     public function index(): JsonResponse
     {
         // Return predefined roles since RoleGrant may not have all roles
-        $roles = ['admin', 'owner', 'user'];
+        $roles = ['admin', 'superadmin', 'user'];
         return response()->json($roles);
     }
 
@@ -40,7 +40,7 @@ class RoleController extends Controller
                 'team' => ['manage', 'invite_user', 'remove_user'],
                 'profile' => ['update', 'change_password'],
             ],
-            'owner' => [
+            'superadmin' => [
                 'user' => ['read', 'update'],
                 'document' => ['create', 'read', 'update', 'delete'],
                 'folder' => ['create', 'read', 'update', 'delete'],

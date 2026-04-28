@@ -1,25 +1,55 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, User, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+
+type UserRole = 'user' | 'admin' | 'superadmin' | 'owner';
+type UserStatus = 'active' | 'inactive';
 
 type CreateUserModalProps = {
     isOpen: boolean;
     onClose: () => void;
-    onSubmit?: (data: { name: string; email: string; password: string; role: string; status: string }) => void;
+    onSubmit?: (data: { name: string; email: string; password: string; role: string; status: string; userId?: number }) => void;
+    editUser?: { id: number; name: string; email: string; role: UserRole; active: boolean } | null;
 };
 
-export default function CreateUserModal({ isOpen, onClose, onSubmit }: CreateUserModalProps) {
+export default function CreateUserModal({ isOpen, onClose, onSubmit, editUser }: CreateUserModalProps) {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [role, setRole] = useState('user');
-    const [status, setStatus] = useState('active');
+    const [role, setRole] = useState<string>('user');
+    const [status, setStatus] = useState<string>('active');
+
+    // Reset form when modal opens/closes or when switching to edit mode
+    useEffect(() => {
+        if (isOpen) {
+            if (editUser) {
+                setName(editUser.name);
+                setEmail(editUser.email);
+                setRole(editUser.role);
+                setStatus(editUser.active ? 'active' : 'inactive');
+                setPassword('');
+            } else {
+                setName('');
+                setEmail('');
+                setPassword('');
+                setRole('user');
+                setStatus('active');
+            }
+        }
+    }, [isOpen, editUser]);
 
     if (!isOpen) return null;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSubmit?.({ name, email, password, role, status });
+        onSubmit?.({ 
+            name, 
+            email, 
+            password, 
+            role, 
+            status,
+            userId: editUser?.id 
+        });
         // Reset form
         setName('');
         setEmail('');
@@ -30,14 +60,14 @@ export default function CreateUserModal({ isOpen, onClose, onSubmit }: CreateUse
     };
 
     return (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm" style={{ zIndex: 150 }} onClick={onClose}>
             <div
                 className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-                    <h2 className="text-lg font-semibold text-white">Create User</h2>
+                    <h2 className="text-lg font-semibold text-white">{editUser ? 'Edit User' : 'Create User'}</h2>
                     <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white">
                         <X className="size-5" />
                     </button>
@@ -79,15 +109,17 @@ export default function CreateUserModal({ isOpen, onClose, onSubmit }: CreateUse
 
                     {/* Password */}
                     <div>
-                        <label className="mb-1.5 block text-sm font-medium text-slate-300">Password</label>
+                        <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                            Password {editUser && <span className="text-slate-500 font-normal">(leave blank to keep current)</span>}
+                        </label>
                         <div className="relative">
                             <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                             <input
                                 type={showPassword ? 'text' : 'password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter password"
-                                required
+                                placeholder={editUser ? '••••••••' : 'Enter password'}
+                                required={!editUser}
                                 className="w-full rounded-xl border border-slate-800 bg-slate-800/50 py-2.5 pl-10 pr-10 text-sm text-white placeholder:text-slate-500 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50 focus:outline-none"
                             />
                             <button
@@ -105,7 +137,7 @@ export default function CreateUserModal({ isOpen, onClose, onSubmit }: CreateUse
                         <label className="mb-1.5 block text-sm font-medium text-slate-300">Role</label>
                         <select
                             value={role}
-                            onChange={(e) => setRole(e.target.value)}
+                            onChange={(e) => setRole(e.target.value as UserRole)}
                             className="w-full rounded-xl border border-slate-800 bg-slate-800/50 py-2.5 px-4 text-sm text-white focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50 focus:outline-none"
                         >
                             <option value="user">User</option>
@@ -119,7 +151,7 @@ export default function CreateUserModal({ isOpen, onClose, onSubmit }: CreateUse
                         <label className="mb-1.5 block text-sm font-medium text-slate-300">Status</label>
                         <select
                             value={status}
-                            onChange={(e) => setStatus(e.target.value)}
+                            onChange={(e) => setStatus(e.target.value as UserStatus)}
                             className="w-full rounded-xl border border-slate-800 bg-slate-800/50 py-2.5 px-4 text-sm text-white focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50 focus:outline-none"
                         >
                             <option value="active">Active</option>
@@ -141,7 +173,7 @@ export default function CreateUserModal({ isOpen, onClose, onSubmit }: CreateUse
                             type="submit"
                             className="flex-1 rounded-xl bg-gradient-to-r from-orange-600 to-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition hover:from-orange-700 hover:to-red-700"
                         >
-                            Create User
+                            {editUser ? 'Update User' : 'Create User'}
                         </button>
                     </div>
                 </form>

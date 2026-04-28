@@ -77,8 +77,8 @@ class RoleSeeder extends Seeder
             ['permission' => 'view_logs', 'resource' => 'system'],
             ['permission' => 'configure_settings', 'resource' => 'system'],
         ],
-        'owner' => [
-            // User management (own team only)
+        'superadmin' => [
+            // User management (full access)
             ['permission' => 'read_user', 'resource' => 'user'],
             ['permission' => 'update_user', 'resource' => 'user'],
             
@@ -215,7 +215,7 @@ class RoleSeeder extends Seeder
         RoleGrant::insert($roleGrants);
         
         $this->command->info('Role seeding completed successfully');
-        $this->command->line('Roles created: admin, owner, user');
+        $this->command->line('Roles created: admin, superadmin, user');
         $this->command->line('Total permissions assigned: ' . count($roleGrants));
     }
 }

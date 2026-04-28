@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import Modal from '@/Components/Modal';
 import { Head, router } from '@inertiajs/react';
 import { PageProps } from '@/types';
 import { useState } from 'react';
@@ -172,111 +173,113 @@ export default function Index({ auth, folders }: TagsIndexPageProps) {
             </div>
 
             {/* Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                        <div className="mb-4 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold text-gray-800">Add Tag Set</h3>
-                            <button
-                                onClick={() => { setShowModal(false); setErrors({}); }}
-                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                            >
-                                ✕
-                            </button>
+            <Modal
+                show={showModal}
+                onClose={() => { setShowModal(false); setErrors({}); }}
+                zIndex={110}
+            >
+                <div className="p-6">
+                    <div className="mb-4 flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-gray-800">Add Tag Set</h3>
+                        <button
+                            onClick={() => { setShowModal(false); setErrors({}); }}
+                            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <div className="space-y-4">
+                        {/* Folder name */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                                Folder Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={folderName}
+                                onChange={(e) => setFolderName(e.target.value)}
+                                placeholder="e.g. Projects"
+                                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            />
+                            {errors.folder_name && <p className="mt-1 text-xs text-red-600">{errors.folder_name}</p>}
                         </div>
 
-                        <div className="space-y-4">
-                            {/* Folder name */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Folder Name <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={folderName}
-                                    onChange={(e) => setFolderName(e.target.value)}
-                                    placeholder="e.g. Projects"
-                                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                />
-                                {errors.folder_name && <p className="mt-1 text-xs text-red-600">{errors.folder_name}</p>}
-                            </div>
+                        {/* Parent folder (optional) */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                                Parent Folder <span className="text-gray-400 font-normal">(optional)</span>
+                            </label>
+                            <select
+                                value={parentId}
+                                onChange={(e) => setParentId(e.target.value)}
+                                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            >
+                                <option value="">— none (root) —</option>
+                                {allFolders(folders).map(({ folder, depth }) => (
+                                    <option key={folder.id} value={folder.id}>
+                                        {'  '.repeat(depth)}{folder.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
-                            {/* Parent folder (optional) */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Parent Folder <span className="text-gray-400 font-normal">(optional)</span>
-                                </label>
-                                <select
-                                    value={parentId}
-                                    onChange={(e) => setParentId(e.target.value)}
-                                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                >
-                                    <option value="">— none (root) —</option>
-                                    {allFolders(folders).map(({ folder, depth }) => (
-                                        <option key={folder.id} value={folder.id}>
-                                            {'  '.repeat(depth)}{folder.name}
-                                        </option>
+                        {/* Category name */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                                Category Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={categoryName}
+                                onChange={(e) => setCategoryName(e.target.value)}
+                                placeholder="e.g. Design"
+                                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            />
+                            {errors.category_name && <p className="mt-1 text-xs text-red-600">{errors.category_name}</p>}
+                        </div>
+
+                        {/* Tags */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                                Tags <span className="text-gray-400 font-normal">(comma-separated, optional)</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={tagsInput}
+                                onChange={(e) => setTagsInput(e.target.value)}
+                                placeholder="ui, ux, prototype"
+                                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            />
+                            {tagsInput.trim() && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                    {tagsInput.split(',').map((t) => t.trim()).filter(Boolean).map((t, i) => (
+                                        <span key={i} className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+                                            # {t}
+                                        </span>
                                     ))}
-                                </select>
-                            </div>
-
-                            {/* Category name */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Category Name <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={categoryName}
-                                    onChange={(e) => setCategoryName(e.target.value)}
-                                    placeholder="e.g. Design"
-                                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                />
-                                {errors.category_name && <p className="mt-1 text-xs text-red-600">{errors.category_name}</p>}
-                            </div>
-
-                            {/* Tags */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Tags <span className="text-gray-400 font-normal">(comma-separated, optional)</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    value={tagsInput}
-                                    onChange={(e) => setTagsInput(e.target.value)}
-                                    placeholder="ui, ux, prototype"
-                                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                />
-                                {tagsInput.trim() && (
-                                    <div className="mt-2 flex flex-wrap gap-1">
-                                        {tagsInput.split(',').map((t) => t.trim()).filter(Boolean).map((t, i) => (
-                                            <span key={i} className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
-                                                # {t}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button
-                                onClick={() => { setShowModal(false); setErrors({}); }}
-                                className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleCreate}
-                                disabled={loading}
-                                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                            >
-                                {loading ? 'Creating…' : 'Create Tag Set'}
-                            </button>
+                                </div>
+                            )}
                         </div>
                     </div>
+
+                    <div className="mt-6 flex justify-end gap-3">
+                        <button
+                            onClick={() => { setShowModal(false); setErrors({}); }}
+                            className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleCreate}
+                            disabled={loading}
+                            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                            {loading ? 'Creating…' : 'Create Tag Set'}
+                        </button>
+                    </div>
                 </div>
-            )}
+            </Modal>
         </AuthenticatedLayout>
     );
 }

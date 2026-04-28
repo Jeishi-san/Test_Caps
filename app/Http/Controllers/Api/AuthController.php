@@ -50,7 +50,7 @@ class AuthController extends Controller
             'username'              => ['required', 'string', 'max:255', 'unique:users,username', 'regex:/^[a-z0-9_]+$/i'],
             'email'                 => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password'              => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()],
-            'role'                  => ['sometimes', 'in:user,owner,admin'],
+            'role'                  => ['sometimes', 'in:user,superadmin,admin'],
         ]);
 
         // Derive a Master Key salt for this user (the key itself is never stored).

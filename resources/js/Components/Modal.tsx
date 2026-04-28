@@ -15,14 +15,14 @@ export default function Modal({
     closeable = true,
     onClose = () => {},
     title,
-    zIndex = '100',
+    zIndex = 100,
 }: PropsWithChildren<{
     show: boolean;
     maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl';
     closeable?: boolean;
     onClose: CallableFunction;
     title?: string;
-    zIndex?: string;
+    zIndex?: number;
 }>) {
     const close = () => {
         if (closeable) {
@@ -47,7 +47,8 @@ export default function Modal({
             <Dialog
                 as="div"
                 id="modal"
-                className={`fixed inset-0 z-[${zIndex}] flex transform items-center overflow-y-auto px-4 py-6 transition-all sm:px-0`}
+                className="fixed inset-0 flex transform items-center overflow-y-auto px-4 py-6 transition-all sm:px-0"
+                style={{ zIndex }}
                 onClose={close}
             >
                 <TransitionChild
