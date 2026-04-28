@@ -45,6 +45,11 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(DocumentNotificationService::class),
             );
         });
+
+        // Register EncryptionService for envelope encryption support
+        $this->app->singleton(\App\Providers\EncryptionService::class, function ($app) {
+            return new \App\Providers\EncryptionService();
+        });
     }
 
     /**

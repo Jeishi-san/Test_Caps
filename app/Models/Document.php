@@ -166,6 +166,27 @@ class Document extends Model
             ->withPivot(['wrapped_dek', 'wrapped_dek_iv', 'wrapped_dek_auth_tag']);
     }
 
+    /**
+     * Retrieves wrapped DEK, IV, and auth tag for a specific user from the share_documents pivot table.
+     *
+     * @param int $userId
+     * @return array|null Array with wrapped_dek, wrapped_dek_iv, wrapped_dek_auth_tag, or null if user not found
+     */
+    public function getWrappedDekForUser(int $userId): ?array
+    {
+        $sharedUser = $this->sharedWith()->where('user_id', $userId)->first();
+        
+        if (!$sharedUser) {
+            return null;
+        }
+
+        return [
+            'wrapped_dek' => $sharedUser->pivot->wrapped_dek,
+            'wrapped_dek_iv' => $sharedUser->pivot->wrapped_dek_iv,
+            'wrapped_dek_auth_tag' => $sharedUser->pivot->wrapped_dek_auth_tag,
+        ];
+    }
+
     // -------------------------------------------------------------------------
     // Query Scopes - Fix N+1 Query Problems
     // -------------------------------------------------------------------------

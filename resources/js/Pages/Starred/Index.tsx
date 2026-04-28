@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { DocumentEntity, FolderEntity } from '@/types/entities';
 import axios from 'axios';
 import { formatFileSize } from '@/utils/fileSize';
+import Tooltip from '@/Components/Tooltip';
 
 interface StarredPageProps extends PageProps {
     starredDocuments: DocumentEntity[];
@@ -106,48 +107,67 @@ export default function Index({
                                 Starred Documents
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                {starredDocuments.map((document) => (
-                                    <div key={document.id} className="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
-                                        <div className="p-6">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="flex items-center">
-                                                    <span className="text-2xl mr-3">{getFileIcon(document.extension)}</span>
-                                                    <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
-                                                        {document.name}
-                                                    </h4>
-                                                </div>
-                                                <button
-                                                    onClick={() => handleToggleStar('document', document.id)}
-                                                    disabled={loading}
-                                                    className="text-yellow-500 hover:text-yellow-600 disabled:opacity-50"
-                                                    title="Remove from starred"
-                                                >
-                                                    ⭐
-                                                </button>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <div className="text-sm text-gray-500 dark:text-gray-400">
-                                                    {formatFileSize(document.size)} • {document.extension?.toUpperCase()}
-                                                </div>
-                                                <div className="text-sm text-gray-500 dark:text-gray-400">
-                                                    Updated {document.updated_at ? new Date(document.updated_at).toLocaleDateString() : 'N/A'}
-                                                </div>
-                                                {document.tags && document.tags.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {document.tags.slice(0, 3).map((tag) => (
-                                                            <span
-                                                                key={tag.id}
-                                                                className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
-                                                            >
-                                                                {tag.name}
-                                                            </span>
-                                                        ))}
+                                {starredDocuments.map((document) => {
+                                    const hasError = document.ingest_status === 'failed' || document.ingest_status === 'error';
+                                    const errorContent = hasError ? `Error: ${document.ingest_error || 'Unknown error'}` : '';
+                                    
+                                    return (
+                                        <Tooltip key={document.id} content={errorContent} position="top">
+                                            <div className={`bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg ${
+                                                hasError ? 'border border-red-300' : ''
+                                            }`}>
+                                                <div className="p-6">
+                                                    <div className="flex items-center justify-between mb-4">
+                                                        <div className="flex items-center">
+                                                            <span className="text-2xl mr-3">{getFileIcon(document.extension)}</span>
+                                                            <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 truncate">
+                                                                {document.name}
+                                                            </h4>
+                                                            {hasError && (
+                                                                <span className="ml-2 text-red-500 text-sm" aria-label="Document has errors">
+                                                                    ⚠️
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleToggleStar('document', document.id)}
+                                                            disabled={loading}
+                                                            className="text-yellow-500 hover:text-yellow-600 disabled:opacity-50"
+                                                            title="Remove from starred"
+                                                        >
+                                                            ⭐
+                                                        </button>
                                                     </div>
-                                                )}
+                                                    <div className="space-y-2">
+                                                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                                                            {formatFileSize(document.size)} • {document.extension?.toUpperCase()}
+                                                        </div>
+                                                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                                                            Updated {document.updated_at ? new Date(document.updated_at).toLocaleDateString() : 'N/A'}
+                                                        </div>
+                                                        {hasError && (
+                                                            <div className="text-xs text-red-500">
+                                                                Status: {document.ingest_status}
+                                                            </div>
+                                                        )}
+                                                        {document.tags && document.tags.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {document.tags.slice(0, 3).map((tag) => (
+                                                                    <span
+                                                                        key={tag.id}
+                                                                        className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
+                                                                    >
+                                                                        {tag.name}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                ))}
+                                        </Tooltip>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

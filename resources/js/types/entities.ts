@@ -45,4 +45,6 @@ export interface DocumentEntity {
     is_stegoed?: boolean;
     is_starred?: boolean;
     tags?: TagEntity[];
+    ingest_status?: string;
+    ingest_error?: string;
 }
