@@ -26,10 +26,10 @@ class UserSeeder extends Seeder
         // Owner account
         User::factory()->create([
             'name' => 'Company Owner',
-            'username' => 'owner',
-            'email' => 'owner@stegolock.local',
+            'username' => 'superadmin',
+            'email' => 'superadmin@stegolock.local',
             'password' => Hash::make('owner123'),
-            'role' => 'owner',
+            'role' => 'superadmin',
         ]);
         
         // Regular user accounts

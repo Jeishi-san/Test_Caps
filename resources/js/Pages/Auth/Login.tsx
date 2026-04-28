@@ -143,13 +143,7 @@ export default function Login({
                 </div>
             </form>
 
-            {/* Admin Login Button */}
-            <Link
-                href={route('admin.login')}
-                className="fixed bottom-4 right-4 z-50 bg-slate-900/90 hover:bg-slate-800 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-colors"
-            >
-                <Shield className="w-6 h-6" />
-            </Link>
+
         </GuestLayout>
     );
 }
