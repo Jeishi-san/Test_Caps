@@ -154,6 +154,18 @@ class Document extends Model
         return $this->watchers()->where('user_id', $userId)->exists();
     }
 
+    /**
+     * Defines the relationship for users this document is shared with.
+     * Explicitly sets relationship keys and includes wrapped DEK pivot columns.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
+    public function sharedWith()
+    {
+        return $this->belongsToMany(User::class, 'share_documents', 'share_id', 'user_id')
+            ->withPivot(['wrapped_dek', 'wrapped_dek_iv', 'wrapped_dek_auth_tag']);
+    }
+
     // -------------------------------------------------------------------------
     // Query Scopes - Fix N+1 Query Problems
     // -------------------------------------------------------------------------
