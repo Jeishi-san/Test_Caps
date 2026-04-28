@@ -1,28 +1,85 @@
 import { Activity, AlertCircle, Database, Shield, UserCheck, Users, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
-const stats = [
-    { label: 'Total Users', value: '1,284', change: '+12%', trend: 'up', icon: Users, color: 'blue' },
-    { label: 'Active Users', value: '892', change: '+5%', trend: 'up', icon: UserCheck, color: 'green' },
-    { label: 'Encrypted Containers', value: '15,432', change: '+18%', trend: 'up', icon: Lock, color: 'purple' },
-    { label: 'Failed Reconstructions', value: '23', change: '-8%', trend: 'down', icon: AlertCircle, color: 'red' },
-];
+interface StatItem {
+    label: string;
+    value: string;
+    change: string;
+    trend: 'up' | 'down';
+    color: string;
+    icon: any;
+}
 
-const systemHealth = [
-    { label: 'Fragment Storage', status: 'operational', value: '99.8%' },
-    { label: 'Encryption Service', status: 'operational', value: '100%' },
-    { label: 'User Authentication', status: 'operational', value: '99.9%' },
-    { label: 'API Gateway', status: 'degraded', value: '95.2%' },
-];
+interface SystemHealthItem {
+    label: string;
+    status: string;
+    value: string;
+}
 
-const recentActivity = [
-    { user: 'john.smith@company.com', action: 'Created new container', time: '2 minutes ago', status: 'success' },
-    { user: 'admin@stegolock.com', action: 'Suspended user account', time: '15 minutes ago', status: 'warning' },
-    { user: 'jane.doe@company.com', action: 'Failed reconstruction attempt', time: '1 hour ago', status: 'error' },
-    { user: 'system', action: 'Automated backup completed', time: '2 hours ago', status: 'success' },
-    { user: 'mike.jones@company.com', action: 'Fragment integrity check passed', time: '3 hours ago', status: 'success' },
-];
+interface RecentActivityItem {
+    user: string;
+    action: string;
+    time: string;
+    status: string;
+}
+
+interface DashboardData {
+    stats: StatItem[];
+    systemHealth: SystemHealthItem[];
+    recentActivity: RecentActivityItem[];
+}
 
 export default function AdminDashboard() {
+    const [loading, setLoading] = useState(true);
+    const [data, setData] = useState<DashboardData | null>(null);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const response = await window.axios.get('/api/admin/dashboard/stats');
+                setData(response.data);
+            } catch (error) {
+                console.error('Failed to fetch admin dashboard stats:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+                    <p className="mt-2 text-slate-400">Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!data) {
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+                    <p className="mt-2 text-slate-400">Failed to load dashboard data</p>
+                </div>
+            </div>
+        );
+    }
+
+    const getIcon = (color: string) => {
+        switch (color) {
+            case 'blue': return Users;
+            case 'green': return UserCheck;
+            case 'purple': return Lock;
+            case 'red': return AlertCircle;
+            default: return Users;
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div>
@@ -31,8 +88,8 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-                {stats.map((stat) => {
-                    const Icon = stat.icon;
+                {data.stats.map((stat) => {
+                    const Icon = getIcon(stat.color);
 
                     return (
                         <div key={stat.label} className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 transition hover:border-slate-700">
@@ -63,7 +120,7 @@ export default function AdminDashboard() {
                         <h2 className="text-xl font-semibold text-white">System Health</h2>
                     </div>
                     <div className="space-y-4">
-                        {systemHealth.map((item) => (
+                        {data.systemHealth.map((item) => (
                             <div key={item.label} className="flex items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
                                 <div className="flex items-center gap-3">
                                     <span className={`size-2 rounded-full ${item.status === 'operational' ? 'bg-green-500' : item.status === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'}`} />
@@ -86,17 +143,21 @@ export default function AdminDashboard() {
                         <h2 className="text-xl font-semibold text-white">Recent Activity</h2>
                     </div>
                     <div className="space-y-4">
-                        {recentActivity.map((activity) => (
-                            <div key={`${activity.user}-${activity.time}`} className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
-                                <div className={`mt-1 size-3 rounded-full ${activity.status === 'success' ? 'bg-green-500' : activity.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'}`} />
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-sm text-slate-300">{activity.action}</p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                        {activity.user} · {activity.time}
-                                    </p>
+                        {data.recentActivity.length > 0 ? (
+                            data.recentActivity.map((activity) => (
+                                <div key={`${activity.user}-${activity.time}`} className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3">
+                                    <div className={`mt-1 size-3 rounded-full ${activity.status === 'success' ? 'bg-green-500' : activity.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm text-slate-300">{activity.action}</p>
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            {activity.user} · {activity.time}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))
+                        ) : (
+                            <p className="text-sm text-slate-400">No recent activity</p>
+                        )}
                     </div>
                 </div>
             </div>

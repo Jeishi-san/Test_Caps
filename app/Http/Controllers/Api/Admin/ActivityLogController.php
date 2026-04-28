@@ -63,4 +63,86 @@ class ActivityLogController extends Controller
 
         return response()->json($logs);
     }
+
+    /**
+     * Export activity logs as CSV
+     */
+    public function export(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user->isAdmin() && !$user->isOwner()) {
+            abort(403, 'Forbidden: Admin access required.');
+        }
+
+        $query = AccessLog::with('user:id,name,email');
+
+        // Apply same filters as index
+        if ($request->has('action') && !empty($request->action)) {
+            $query->where('action', $request->action);
+        }
+
+        if ($request->has('status') && !empty($request->status)) {
+            $query->where('status_code', (int) $request->status);
+        }
+
+        if ($request->has('user_id') && !empty($request->user_id)) {
+            $query->where('user_id', $request->user_id);
+        }
+
+        if ($request->has('start_date') && !empty($request->start_date)) {
+            $query->where('accessed_at', '>=', $request->start_date);
+        }
+        if ($request->has('end_date') && !empty($request->end_date)) {
+            $query->where('accessed_at', '<=', $request->end_date);
+        }
+
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('url', 'like', "%{$search}%")
+                  ->orWhere('ip_address', 'like', "%{$search}%");
+            });
+        }
+
+        $logs = $query->select([
+            'id', 'user_id', 'action', 'resource', 'resource_id',
+            'ip_address', 'method', 'url', 'status_code', 'accessed_at'
+        ])
+            ->latest('accessed_at')
+            ->get();
+
+        $filename = 'activity_logs_export_' . now()->format('Y-m-d_H-i-s') . '.csv';
+
+        return response()->streamDownload(function () use ($logs) {
+            $handle = fopen('php://output', 'w');
+
+            // Add CSV headers
+            fputcsv($handle, [
+                'ID', 'Timestamp', 'User', 'Email', 'Action', 'Resource', 'Resource ID',
+                'Method', 'URL', 'Status Code', 'IP Address'
+            ]);
+
+            // Add data rows
+            foreach ($logs as $log) {
+                fputcsv($handle, [
+                    $log->id,
+                    $log->accessed_at,
+                    $log->user?->name ?? 'Unknown',
+                    $log->user?->email ?? 'Unknown',
+                    $log->action,
+                    $log->resource,
+                    $log->resource_id,
+                    $log->method,
+                    $log->url,
+                    $log->status_code,
+                    $log->ip_address,
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
 }

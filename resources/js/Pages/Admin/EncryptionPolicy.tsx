@@ -2,17 +2,35 @@ import AdminLayout from '@/Admin/AdminLayout';
 import { Head } from '@inertiajs/react';
 import { AlertTriangle, Save } from 'lucide-react';
 import { useState } from 'react';
+import axios from 'axios';
+import { useToast } from '@/Components/Toast';
 
 export default function EncryptionPolicy() {
     const [aesMode] = useState('AES-256-GCM');
-    const [keySize, setKeySize] = useState('256');
     const [kdfIterations, setKdfIterations] = useState('100000');
     const [fragmentSize, setFragmentSize] = useState('1024');
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { success, error: showError } = useToast();
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Handle save
-        console.log('Saving encryption policy...');
+        setSaving(true);
+        setError(null);
+
+        try {
+            await axios.put('/api/admin/encryption-policy', {
+                mkd_iterations: parseInt(kdfIterations) || 100000,
+                fragment_size: parseInt(fragmentSize) || 1024,
+            });
+            success('Encryption policy saved successfully!');
+        } catch (err: any) {
+            const errorMsg = err.response?.data?.message || 'Failed to save encryption policy. Please try again.';
+            setError(errorMsg);
+            showError(errorMsg);
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -27,10 +45,11 @@ export default function EncryptionPolicy() {
                     </div>
                     <button
                         onClick={handleSubmit}
-                        className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-500/30 transition hover:bg-red-700"
+                        disabled={saving}
+                        className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-500/30 transition hover:bg-red-700 disabled:opacity-50"
                     >
                         <Save className="size-4" />
-                        Save Changes
+                        {saving ? 'Saving...' : 'Save Changes'}
                     </button>
                 </div>
 
@@ -41,6 +60,17 @@ export default function EncryptionPolicy() {
                         Encryption settings are critical system configurations. Changes may affect existing encrypted data.
                     </p>
                 </div>
+
+                {/* Error Message */}
+                {error && (
+                    <div className="flex items-center gap-3 rounded-xl border border-red-600/30 bg-red-600/10 p-4">
+                        <AlertTriangle className="size-5 text-red-400" />
+                        <p className="text-sm text-red-200">{error}</p>
+                        <button onClick={() => setError(null)} className="ml-auto text-sm text-red-400 hover:text-red-300">
+                            Dismiss
+                        </button>
+                    </div>
+                )}
 
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="space-y-6">
@@ -57,19 +87,6 @@ export default function EncryptionPolicy() {
                                 />
                             </div>
 
-                            {/* Key Size */}
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium text-slate-300">Key Size (bits)</label>
-                                <select
-                                    value={keySize}
-                                    onChange={(e) => setKeySize(e.target.value)}
-                                    className="w-full rounded-xl border border-slate-800 bg-slate-800/50 py-2.5 px-4 text-sm text-white focus:border-red-500/50 focus:ring-2 focus:ring-red-500/50 focus:outline-none"
-                                >
-                                    <option value="128">128 bits</option>
-                                    <option value="256">256 bits (Recommended)</option>
-                                    <option value="512">512 bits</option>
-                                </select>
-                            </div>
 
                             {/* KDF Iterations */}
                             <div>
@@ -99,10 +116,11 @@ export default function EncryptionPolicy() {
                     <div className="flex justify-end">
                         <button
                             type="submit"
-                            className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-500/30 transition hover:bg-red-700"
+                            disabled={saving}
+                            className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-500/30 transition hover:bg-red-700 disabled:opacity-50"
                         >
                             <Save className="size-4" />
-                            Save Changes
+                            {saving ? 'Saving...' : 'Save Changes'}
                         </button>
                     </div>
                 </form>

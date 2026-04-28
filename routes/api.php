@@ -258,8 +258,10 @@ Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
  
      // Admin endpoints
      Route::prefix('admin')->name('api.admin.')->group(function () {
+         Route::get('/dashboard/stats', [DashboardController::class, 'adminStats'])->name('dashboard.stats');
          Route::get('/fragments', [FragmentController::class, 'index'])->name('fragments.index');
          Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+         Route::get('/activity-logs/export', [ActivityLogController::class, 'export'])->name('activity-logs.export');
          Route::get('/encryption-policy', [EncryptionPolicyController::class, 'index'])->name('encryption-policy.index');
          Route::put('/encryption-policy', [EncryptionPolicyController::class, 'update'])->name('encryption-policy.update');
          Route::get('/key-management', [KeyManagementController::class, 'index'])->name('key-management.index');

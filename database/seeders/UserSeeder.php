@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
@@ -15,49 +14,72 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         // Admin account
-        User::factory()->create([
-            'name' => 'System Administrator',
-            'username' => 'admin',
-            'email' => 'admin@stegolock.local',
-            'password' => Hash::make('admin123'),
-            'role' => 'admin',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'admin@stegolock.local'],
+            [
+                'name' => 'System Administrator',
+                'username' => 'admin',
+                'password' => Hash::make('admin123'),
+                'role' => 'admin',
+                'active' => true,
+            ]
+        );
         
-        // Owner account
-        User::factory()->create([
-            'name' => 'Company Owner',
-            'username' => 'superadmin',
-            'email' => 'superadmin@stegolock.local',
-            'password' => Hash::make('owner123'),
-            'role' => 'superadmin',
-        ]);
+        // Superadmin account (was previously 'owner')
+        User::updateOrCreate(
+            ['email' => 'superadmin@stegolock.local'],
+            [
+                'name' => 'Company Owner',
+                'username' => 'superadmin',
+                'password' => Hash::make('superadmin123'),
+                'role' => 'superadmin',
+                'active' => true,
+            ]
+        );
         
         // Regular user accounts
-        User::factory()->create([
-            'name' => 'John Doe',
-            'username' => 'john.doe',
-            'email' => 'john.doe@stegolock.local',
-            'password' => Hash::make('user123'),
-            'role' => 'user',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'john.doe@stegolock.local'],
+            [
+                'name' => 'John Doe',
+                'username' => 'john.doe',
+                'password' => Hash::make('user123'),
+                'role' => 'user',
+                'active' => true,
+            ]
+        );
         
-        User::factory()->create([
-            'name' => 'Jane Smith',
-            'username' => 'jane.smith',
-            'email' => 'jane.smith@stegolock.local',
-            'password' => Hash::make('user123'),
-            'role' => 'user',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'jane.smith@stegolock.local'],
+            [
+                'name' => 'Jane Smith',
+                'username' => 'jane.smith',
+                'password' => Hash::make('user123'),
+                'role' => 'user',
+                'active' => true,
+            ]
+        );
         
-        User::factory()->create([
-            'name' => 'Mike Johnson',
-            'username' => 'mike.johnson',
-            'email' => 'mike.johnson@stegolock.local',
-            'password' => Hash::make('user123'),
-            'role' => 'user',
-        ]);
+        User::updateOrCreate(
+            ['email' => 'mike.johnson@stegolock.local'],
+            [
+                'name' => 'Mike Johnson',
+                'username' => 'mike.johnson',
+                'password' => Hash::make('user123'),
+                'role' => 'user',
+                'active' => true,
+            ]
+        );
         
-        // Additional random users
-        User::factory()->count(7)->create(['role' => 'user']);
+        // Additional random users (only create if we don't have enough)
+        $userCount = User::where('role', 'user')->count();
+        $targetCount = 10; // 3 named users + 7 random
+        
+        if ($userCount < $targetCount) {
+            User::factory()->count($targetCount - $userCount)->create([
+                'role' => 'user',
+                'active' => true,
+            ]);
+        }
     }
 }

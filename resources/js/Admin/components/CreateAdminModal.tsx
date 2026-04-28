@@ -30,7 +30,7 @@ export default function CreateAdminModal({ isOpen, onClose, onSubmit }: CreateAd
     };
 
     return (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm" style={{ zIndex: 150 }} onClick={onClose}>
             <div
                 className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}

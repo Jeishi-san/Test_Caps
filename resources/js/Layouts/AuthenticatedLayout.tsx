@@ -2,9 +2,19 @@ import ApplicationLogo from '@/Components/ApplicationLogo';
 import Dropdown from '@/Components/Dropdown';
 import NavLink from '@/Components/NavLink';
 import NotificationBell from '@/Components/NotificationBell';
-import { Link, usePage } from '@inertiajs/react';
-import { PropsWithChildren, ReactNode, useState } from 'react';
+import { ToastContainer } from '@/Components/Toast';
+import { Link, usePage, router } from '@inertiajs/react';
+import { PropsWithChildren, ReactNode, useState, createContext, useContext } from 'react';
 import { PageProps } from '@/types';
+
+// Context for sharing view mode across the layout
+const ViewModeContext = createContext<{
+  viewMode: 'grid' | 'list';
+  setViewMode: (mode: 'grid' | 'list') => void;
+}>({
+  viewMode: 'grid',
+  setViewMode: () => {},
+});
 import {
   Shield,
   Plus,
@@ -32,21 +42,26 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 
+interface AuthenticatedLayoutProps {
+  header?: ReactNode;
+  children: ReactNode;
+  storageUsed?: number;
+  storageTotal?: number;
+}
+
 export default function Authenticated({
   header,
   children,
-}: PropsWithChildren<{ header?: ReactNode }>) {
+  storageUsed = 0,
+  storageTotal = 1,
+}: PropsWithChildren<AuthenticatedLayoutProps>) {
   const user = usePage<PageProps>().props.auth.user;
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showNewDropdown, setShowNewDropdown] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showSearchFilter, setShowSearchFilter] = useState(false);
 
-  // Mock storage values - will be replaced with real API data
-  const storageUsed = 2.4;
-  const storageTotal = 10;
-  const storagePercent = (storageUsed / storageTotal) * 100;
-  const storageCritical = storagePercent > 90;
+  const storagePercent = storageTotal > 0 ? (storageUsed / storageTotal) * 100 : 0;
 
   const navigationItems = [
     { label: 'My Documents', icon: Folder, href: route('documents.index', undefined, false), active: route().current('documents.index') },
@@ -65,11 +80,12 @@ export default function Authenticated({
   const [showSecurityPanel, setShowSecurityPanel] = useState(false);
 
   return (
+    <ViewModeContext.Provider value={{ viewMode, setViewMode }}>
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex">
       {/* Mobile Overlay */}
       {showMobileSidebar && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
           onClick={() => setShowMobileSidebar(false)}
         />
       )}
@@ -257,43 +273,36 @@ export default function Authenticated({
         </header>
 
         {/* Search Bar */}
-        <div className="px-8 py-4 flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search documents..."
-              className="w-full h-12 pl-10 pr-4 rounded-lg border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
-          <button
-            onClick={() => setShowSearchFilter(!showSearchFilter)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${showSearchFilter ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-gray-300 hover:bg-gray-50'}`}
+        <div className="px-8 py-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const query = formData.get('search') as string;
+              if (query.trim()) {
+                router.visit(route('search', undefined, false) + `?q=${encodeURIComponent(query.trim())}`);
+              }
+            }}
+            className="flex gap-2"
           >
-            <SlidersHorizontal className="w-4 h-4" />
-            <span>Filters</span>
-            {showSearchFilter && <ChevronDown className="w-4 h-4 rotate-180" />}
-            {!showSearchFilter && <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {/* Filter Dropdown Panel */}
-          {showSearchFilter && (
-            <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-[150] p-4">
-              <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-                <h3 className="font-semibold text-gray-900">Filters & Sort</h3>
-                <button className="text-xs text-indigo-600">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="py-3">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Sort By</h4>
-                <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg">Name (A-Z)</button>
-                <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg">Name (Z-A)</button>
-                <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg">Date (Newest First)</button>
-                <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg">Date (Oldest First)</button>
-              </div>
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                name="search"
+                placeholder="Search documents..."
+                className="w-full h-12 pl-10 pr-4 rounded-lg border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => router.visit(route('search', undefined, false))}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors bg-white border-gray-300 hover:bg-gray-50`}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Advanced Search</span>
+            </button>
+          </form>
         </div>
 
         {/* Page Header */}
@@ -314,14 +323,14 @@ export default function Authenticated({
       {/* Security Panel Floating Button */}
       <button
         onClick={() => setShowSecurityPanel(true)}
-        className="fixed bottom-6 right-6 z-50 bg-green-600 hover:bg-green-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all"
+        className="fixed bottom-6 right-6 z-120 bg-green-600 hover:bg-green-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all"
       >
         <Shield className="w-6 h-6" />
       </button>
 
       {/* Security Slide-Out Panel */}
       {showSecurityPanel && (
-        <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 overflow-auto">
+        <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-120 overflow-auto">
           {/* Panel Header */}
           <div className="bg-gradient-to-r from-green-600 to-green-700 p-6 border-b border-green-800">
             <div className="flex items-center justify-between">
@@ -418,12 +427,16 @@ export default function Authenticated({
                 <div>
                   <p className="text-gray-400">Compliance</p>
                   <p className="font-medium">SOC 2, GDPR</p>
-                </div>
               </div>
             </div>
           </div>
         </div>
-      )}
-    </div>
+        <ToastContainer />
+      </div>
+    )}
+  </div>
+    </ViewModeContext.Provider>
   );
 }
+
+export { ViewModeContext };

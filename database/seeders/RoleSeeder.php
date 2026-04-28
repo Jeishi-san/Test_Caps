@@ -78,7 +78,7 @@ class RoleSeeder extends Seeder
             ['permission' => 'configure_settings', 'resource' => 'system'],
         ],
         'superadmin' => [
-            // User management (own team only)
+            // User management (full access)
             ['permission' => 'read_user', 'resource' => 'user'],
             ['permission' => 'update_user', 'resource' => 'user'],
             

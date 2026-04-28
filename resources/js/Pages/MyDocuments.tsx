@@ -1,4 +1,5 @@
 ﻿import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import Modal from '@/Components/Modal';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
@@ -311,71 +312,69 @@ export default function MyDocuments({ auth, documents, folders = [] }: MyDocumen
                     </div>
                 )}
 
-                {showDeleteModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={cancelDelete}>
-                        <div className="w-80 rounded-xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
-                            <h2 className="mb-2 text-lg font-semibold text-gray-800">Delete File</h2>
+                <Modal
+                    show={showDeleteModal}
+                    onClose={cancelDelete}
+                    zIndex={110}
+                >
+                    <div className="p-6">
+                        <h2 className="mb-2 text-lg font-semibold text-gray-800">Delete File</h2>
 
-                            <p className="mb-6 text-sm text-gray-500">
-                                Are you sure you want to delete this file? This action cannot be undone.
-                            </p>
+                        <p className="mb-6 text-sm text-gray-500">
+                            Are you sure you want to delete this file? This action cannot be undone.
+                        </p>
 
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    type="button"
-                                    onClick={cancelDelete}
-                                    className="rounded-md bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
-                                >
-                                    Cancel
-                                </button>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={cancelDelete}
+                                className="rounded-md bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
+                            >
+                                Cancel
+                            </button>
 
-                                <button
-                                    type="button"
-                                    onClick={confirmDelete}
-                                    className="rounded-md bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
-                                >
-                                    Delete
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={confirmDelete}
+                                className="rounded-md bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
+                            >
+                                Delete
+                            </button>
                         </div>
                     </div>
-                )}
+                </Modal>
 
-                {showKeepFileModal && (
-                    <div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-                        onClick={() => setShowKeepFileModal(null)}
-                    >
-                        <div
-                            className="w-80 rounded-xl bg-white p-6 shadow-xl"
-                            onClick={(event) => event.stopPropagation()}
-                        >
-                            <h2 className="mb-2 text-lg font-semibold text-gray-800">File Unlocked</h2>
+                <Modal
+                    show={!!showKeepFileModal}
+                    onClose={() => setShowKeepFileModal(null)}
+                    zIndex={110}
+                >
+                    <div className="p-6">
+                        <h2 className="mb-2 text-lg font-semibold text-gray-800">File Unlocked</h2>
 
-                            <p className="mb-6 text-sm text-gray-500">
-                                Do you want to keep the unlocked file on the system or remove it?
-                            </p>
+                        <p className="mb-6 text-sm text-gray-500">
+                            Do you want to keep the unlocked file on the system or remove it?
+                        </p>
 
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    type="button"
-                                    onClick={keepFile}
-                                    className="rounded-md bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
-                                >
-                                    Keep File
-                                </button>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={keepFile}
+                                className="rounded-md bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
+                            >
+                                Keep File
+                            </button>
 
-                                <button
-                                    type="button"
-                                    onClick={handleDeleteFromKeepModal}
-                                    className="rounded-md bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
-                                >
-                                    Delete File
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={handleDeleteFromKeepModal}
+                                className="rounded-md bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
+                            >
+                                Delete File
+                            </button>
                         </div>
                     </div>
-                )}
+                </Modal>
 
                 <SecurityPanel />
 
@@ -386,47 +385,49 @@ export default function MyDocuments({ auth, documents, folders = [] }: MyDocumen
                     currentUserEmail={auth.user.email}
                 />
 
-                {showMoveModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowMoveModal(false)}>
-                        <div className="w-96 rounded-xl bg-white p-6 shadow-xl" onClick={(event) => event.stopPropagation()}>
-                            <h2 className="mb-4 text-lg font-semibold text-gray-800">Move Document</h2>
+                <Modal
+                    show={showMoveModal}
+                    onClose={() => setShowMoveModal(false)}
+                    zIndex={110}
+                >
+                    <div className="p-6">
+                        <h2 className="mb-4 text-lg font-semibold text-gray-800">Move Document</h2>
 
-                            <p className="mb-4 text-sm text-gray-500">
-                                Select a folder to move the document to:
-                            </p>
+                        <p className="mb-4 text-sm text-gray-500">
+                            Select a folder to move the document to:
+                        </p>
 
-                            <select
-                                className="mb-6 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                value={selectedFolderId}
-                                onChange={(e) => setSelectedFolderId(e.target.value)}
+                        <select
+                            className="mb-6 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            value={selectedFolderId}
+                            onChange={(e) => setSelectedFolderId(e.target.value)}
+                        >
+                            <option value="root">— Root (No Folder) —</option>
+                            {folders.map((folder) => (
+                                <option key={folder.id} value={folder.id}>{folder.name}</option>
+                            ))}
+                        </select>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowMoveModal(false)}
+                                className="rounded-md bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
                             >
-                                <option value="root">— Root (No Folder) —</option>
-                                {folders.map((folder) => (
-                                    <option key={folder.id} value={folder.id}>{folder.name}</option>
-                                ))}
-                            </select>
+                                Cancel
+                            </button>
 
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowMoveModal(false)}
-                                    className="rounded-md bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
-                                >
-                                    Cancel
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={confirmMove}
-                                    disabled={!selectedFolderId}
-                                    className="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
-                                >
-                                    Move
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={confirmMove}
+                                disabled={!selectedFolderId}
+                                className="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                                Move
+                            </button>
                         </div>
                     </div>
-                )}
+                </Modal>
 
                 {showShareModal && selectedShareDoc && (
                     <ShareModal

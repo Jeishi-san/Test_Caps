@@ -10,6 +10,20 @@ export default {
         './resources/js/**/*.tsx',
     ],
 
+    // Safelist for z-index values used across the application
+    // This ensures dynamic or conditional z-index classes are generated
+    safelist: [
+        'z-10',
+        'z-20',
+        'z-30',
+        'z-40',
+        'z-50',
+        'z-100',
+        'z-110',
+        'z-120',
+        'z-130',
+    ],
+
     theme: {
         extend: {
             fontFamily: {

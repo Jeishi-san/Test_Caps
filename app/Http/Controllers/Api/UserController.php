@@ -45,7 +45,7 @@ class UserController extends Controller
     public function updateRole(Request $request, int $id): JsonResponse
     {
         $request->validate([
-            'role' => ['required', 'string', Rule::in(['admin', 'owner', 'user'])],
+            'role' => ['required', 'string', Rule::in(['admin', 'superadmin', 'user'])],
         ]);
 
         $user = User::findOrFail($id);
@@ -135,7 +135,7 @@ class UserController extends Controller
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'password' => ['sometimes', 'string', 'min:8'],
-            'role' => ['sometimes', 'string', Rule::in(['user', 'admin'])],
+            'role' => ['sometimes', 'string', Rule::in(['user', 'admin', 'superadmin'])],
             'active' => ['sometimes', 'boolean'],
         ]);
 
@@ -191,7 +191,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Forbidden: Superadmin access required.'], 403);
         }
 
-        $admins = User::whereIn('role', ['admin', 'owner'])
+        $admins = User::whereIn('role', ['admin', 'superadmin'])
             ->select(['id', 'name', 'email', 'role', 'active', 'created_at'])
             ->orderBy('role')
             ->orderBy('name')

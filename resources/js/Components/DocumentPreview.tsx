@@ -1,6 +1,7 @@
 import type { DocumentEntity } from '@/types/entities';
 import Modal from '@/Components/Modal';
 import SecondaryButton from '@/Components/SecondaryButton';
+import { formatFileSize } from '@/utils/fileSize';
 
 interface DocumentPreviewProps {
     show: boolean;
@@ -53,14 +54,6 @@ export default function DocumentPreview({ show, onClose, document }: DocumentPre
         return ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(
             document.extension?.toLowerCase() || ''
         );
-    };
-
-    const formatFileSize = (bytes: number) => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
     };
 
     const renderPreview = () => {

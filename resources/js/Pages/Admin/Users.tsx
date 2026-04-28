@@ -22,6 +22,7 @@ export default function Users() {
     const [statusFilter, setStatusFilter] = useState('All');
     const [showStatusDropdown, setShowStatusDropdown] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [editingUser, setEditingUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
     // Fetch users from API
@@ -45,25 +46,46 @@ export default function Users() {
         fetchUsers();
     }, [search, statusFilter]);
 
-    const handleCreateUser = async (userData: { 
-        name: string; 
-        email: string; 
-        password: string; 
+    const handleCreateUser = async (userData: {
+        name: string;
+        email: string;
+        password: string;
         role?: string;
         status?: string;
+        userId?: number;
     }) => {
         try {
-            const payload = {
-                ...userData,
-                active: userData.status !== 'inactive' // Map status to boolean (only 'inactive' maps to false)
+            const payload: any = {
+                name: userData.name,
+                email: userData.email,
+                role: userData.role || 'user',
+                active: userData.status !== 'inactive',
             };
-            await axios.post('/api/users', payload);
+
+            if (userData.userId) {
+                // Update existing user: only include password if provided
+                if (userData.password && userData.password.trim() !== '') {
+                    payload.password = userData.password;
+                }
+                await axios.put(`/api/users/${userData.userId}`, payload);
+            } else {
+                // Create new user: password is required
+                payload.password = userData.password;
+                await axios.post('/api/users', payload);
+            }
+
             setShowCreateModal(false);
+            setEditingUser(null);
             fetchUsers(); // Refresh list
         } catch (error: any) {
-            console.error('Failed to create user:', error.response?.data);
-            alert(error.response?.data?.message || 'Failed to create user');
+            console.error('Failed to save user:', error.response?.data);
+            alert(error.response?.data?.message || 'Failed to save user');
         }
+    };
+
+    const handleEditUser = (user: User) => {
+        setEditingUser(user);
+        setShowCreateModal(true);
     };
 
     const handleDeleteUser = async (userId: number) => {
@@ -192,10 +214,13 @@ export default function Users() {
                                         {new Date(user.created_at).toLocaleDateString()}
                                     </div>
                                     <div className="col-span-1 flex items-center gap-2">
-                                        <button className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white">
+                                        <button
+                                            onClick={() => handleEditUser(user)}
+                                            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                                        >
                                             <Pencil className="size-4" />
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={() => handleDeleteUser(user.id)}
                                             className="rounded-lg p-2 text-slate-400 transition hover:bg-red-500/20 hover:text-red-400"
                                         >
@@ -211,11 +236,15 @@ export default function Users() {
                     )}
                 </div>
 
-                {/* Create User Modal */}
-                <CreateUserModal 
-                    isOpen={showCreateModal} 
-                    onClose={() => setShowCreateModal(false)}
+                {/* Create/Edit User Modal */}
+                <CreateUserModal
+                    isOpen={showCreateModal}
+                    onClose={() => {
+                        setShowCreateModal(false);
+                        setEditingUser(null);
+                    }}
                     onSubmit={handleCreateUser}
+                    editUser={editingUser}
                 />
             </div>
         </AdminLayout>
