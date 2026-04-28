@@ -215,7 +215,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/order', [DocumentFileController::class, 'updateOrder'])->name('updateOrder');
     });
 
-    Route::get('/api/users', [UserController::class, 'search'])->name('users.search');
+    Route::get('/users/search', [UserController::class, 'search'])->name('users.search');
 
     // File Request Routes
     Route::post('/request-document', [FileRequestController::class, 'store'])->name('fileRequest.store');

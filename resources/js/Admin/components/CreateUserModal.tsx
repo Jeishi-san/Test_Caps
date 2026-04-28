@@ -156,7 +156,6 @@ export default function CreateUserModal({ isOpen, onClose, onSubmit, editUser }:
                         >
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
-                            <option value="suspended">Suspended</option>
                         </select>
                     </div>
 

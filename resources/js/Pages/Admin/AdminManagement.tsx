@@ -13,8 +13,6 @@ type Admin = {
     email: string;
     role: 'superadmin' | 'admin';
     active: boolean;
-    mfa_enabled: boolean;
-    last_login_at: string | null;
     created_at: string;
 };
 
@@ -47,7 +45,7 @@ export default function AdminManagement() {
         setLoading(true);
         setError(null);
         try {
-            const response = await axios.get<PaginatedResponse<Admin>>('/api/admins', {
+            const response = await axios.get('/api/admins', {
                 params: { page, per_page: perPage }
             });
             setAdmins(response.data.data || []);
@@ -72,7 +70,7 @@ export default function AdminManagement() {
 
         setDeleting(true);
         try {
-            await axios.delete(`/api/admin/admins/${deletingAdmin.id}`);
+            await axios.delete(`/api/users/${deletingAdmin.id}`);
             setShowDeleteModal(false);
             setDeletingAdmin(null);
             success(`Admin "${deletingAdmin.name}" deleted successfully`);
@@ -107,21 +105,6 @@ export default function AdminManagement() {
             default:
                 return null;
         }
-    };
-
-    const formatLastActive = (dateString: string | null) => {
-        if (!dateString) return 'Never';
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-
-        if (diffMins < 60) return `${diffMins} min ago`;
-        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-        if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-        return date.toLocaleDateString();
     };
 
     return (
@@ -169,12 +152,10 @@ export default function AdminManagement() {
                         <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50">
                             {/* Header Row */}
                             <div className="grid grid-cols-12 gap-4 bg-slate-800/50 px-6 py-4">
-                                <div className="col-span-3 text-xs font-semibold text-slate-400 uppercase">Name</div>
-                                <div className="col-span-3 text-xs font-semibold text-slate-400 uppercase">Email</div>
+                                <div className="col-span-4 text-xs font-semibold text-slate-400 uppercase">Name</div>
+                                <div className="col-span-4 text-xs font-semibold text-slate-400 uppercase">Email</div>
                                 <div className="col-span-2 text-xs font-semibold text-slate-400 uppercase">Role</div>
-                                <div className="col-span-1 text-xs font-semibold text-slate-400 uppercase">MFA</div>
-                                <div className="col-span-2 text-xs font-semibold text-slate-400 uppercase">Last Active</div>
-                                <div className="col-span-1 text-xs font-semibold text-slate-400 uppercase">Actions</div>
+                                <div className="col-span-2 text-xs font-semibold text-slate-400 uppercase">Actions</div>
                             </div>
 
                             {/* Data Rows */}
@@ -188,17 +169,7 @@ export default function AdminManagement() {
                                             <span className="text-sm text-slate-400">{admin.email}</span>
                                         </div>
                                         <div className="col-span-2">{getRoleBadge(admin.role)}</div>
-                                        <div className="col-span-1">
-                                            <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${admin.mfa_enabled ? 'bg-green-600' : 'bg-slate-600'}`}>
-                                                <span
-                                                    className={`inline-block h-3 w-3 rounded-full bg-white transition ${admin.mfa_enabled ? 'translate-x-5' : 'translate-x-1'}`}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="col-span-2">
-                                            <span className="text-sm text-slate-500">{formatLastActive(admin.last_login_at)}</span>
-                                        </div>
-                                        <div className="col-span-1 flex items-center gap-2">
+                                        <div className="col-span-2 flex items-center gap-2">
                                             <button
                                                 onClick={() => openDeleteModal(admin)}
                                                 disabled={admin.role === 'superadmin'}

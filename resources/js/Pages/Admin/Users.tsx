@@ -9,9 +9,46 @@ type User = {
     id: number;
     name: string;
     email: string;
-    role: 'user' | 'admin' | 'owner';
+    role: 'user' | 'admin' | 'superadmin' | 'owner';
     active: boolean;
-    created_at: string;
+    created_at: string | null;
+};
+
+type ApiUser = Partial<User> & {
+    id: number;
+    status?: string;
+    is_active?: boolean | number | string;
+    createdAt?: string;
+};
+
+const parseBoolean = (value: unknown): boolean => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value === 1;
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        return normalized === '1' || normalized === 'true' || normalized === 'active';
+    }
+    return false;
+};
+
+const normalizeUser = (raw: ApiUser): User => {
+    const createdAt = raw.created_at ?? raw.createdAt ?? null;
+    const activeFromStatus = typeof raw.status === 'string' ? raw.status.toLowerCase() === 'active' : undefined;
+
+    return {
+        id: raw.id,
+        name: raw.name ?? 'Unknown',
+        email: raw.email ?? '',
+        role: (raw.role as User['role']) ?? 'user',
+        active: activeFromStatus ?? parseBoolean(raw.active ?? raw.is_active),
+        created_at: createdAt,
+    };
+};
+
+const formatDate = (value: string | null): string => {
+    if (!value) return 'N/A';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString();
 };
 
 const statusFilters = ['All', 'Active', 'Inactive'];
@@ -34,7 +71,13 @@ export default function Users() {
             if (statusFilter !== 'All') params.status = statusFilter.toLowerCase();
             
             const response = await axios.get('/api/users', { params });
-            setUsers(response.data);
+            const payload = Array.isArray(response.data)
+                ? response.data
+                : Array.isArray(response.data?.data)
+                    ? response.data.data
+                    : [];
+
+            setUsers(payload.map((item: ApiUser) => normalizeUser(item)));
         } catch (error) {
             console.error('Failed to fetch users:', error);
         } finally {
@@ -106,6 +149,8 @@ export default function Users() {
                 return <span className="inline-flex items-center gap-1 rounded-md border border-red-600/30 bg-red-600/20 px-2 py-1 text-xs font-medium text-red-400"><Shield className="size-3" /> OWNER</span>;
             case 'admin':
                 return <span className="inline-flex items-center gap-1 rounded-md border border-blue-600/30 bg-blue-600/20 px-2 py-1 text-xs font-medium text-blue-400"><UserCog className="size-3" /> ADMIN</span>;
+            case 'superadmin':
+                return <span className="inline-flex items-center gap-1 rounded-md border border-purple-600/30 bg-purple-600/20 px-2 py-1 text-xs font-medium text-purple-400"><Shield className="size-3" /> SUPERADMIN</span>;
             default:
                 return <span className="inline-flex rounded-md border border-slate-600/30 bg-slate-600/20 px-2 py-1 text-xs font-medium text-slate-400">USER</span>;
         }
@@ -211,7 +256,7 @@ export default function Users() {
                                     <div className="col-span-2">{getRoleBadge(user.role)}</div>
                                     <div className="col-span-2">{getStatusBadge(user.active)}</div>
                                     <div className="col-span-3 text-sm text-slate-500">
-                                        {new Date(user.created_at).toLocaleDateString()}
+                                        {formatDate(user.created_at)}
                                     </div>
                                     <div className="col-span-1 flex items-center gap-2">
                                         <button

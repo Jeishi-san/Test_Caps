@@ -22,7 +22,7 @@ class UserController extends Controller
         $user = Auth::user();
         
         // All authenticated users can see the user list for sharing
-        $users = User::select('id', 'name', 'email', 'username', 'role', 'created_at')
+        $users = User::select('id', 'name', 'email', 'username', 'role', 'active', 'created_at')
             ->orderBy('name')
             ->get()
             ->map(function ($user) {
@@ -32,11 +32,31 @@ class UserController extends Controller
                     'email' => $user->email,
                     'username' => $user->username,
                     'role' => $user->role,
+                    'active' => $user->active,
                     'created_at' => $user->created_at?->toISOString(),
                 ];
             });
 
         return response()->json($users);
+    }
+
+    /**
+     * Get a single user by ID
+     */
+    public function show(int $id): JsonResponse
+    {
+        $user = User::select('id', 'name', 'email', 'username', 'role', 'active', 'created_at')
+            ->findOrFail($id);
+
+        return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'username' => $user->username,
+            'role' => $user->role,
+            'active' => $user->active,
+            'created_at' => $user->created_at?->toISOString(),
+        ]);
     }
 
     /**
@@ -51,9 +71,9 @@ class UserController extends Controller
         $user = User::findOrFail($id);
         $currentUser = Auth::user();
 
-        // Only admins can update roles to admin
-        if ($request->role === 'admin' && !$currentUser->isAdmin()) {
-            return response()->json(['message' => 'Forbidden: Only admins can create admin users.'], 403);
+        // Only superadmins can update roles to superadmin
+        if ($request->role === 'superadmin' && !$currentUser->isOwner()) {
+            return response()->json(['message' => 'Forbidden: Only superadmins can create superadmin users.'], 403);
         }
 
         // Only admins or owners can update other users' roles
@@ -71,6 +91,7 @@ class UserController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
+                'active' => $user->active,
             ],
         ]);
     }
@@ -90,13 +111,18 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8'],
-            'role' => ['sometimes', 'string', Rule::in(['user', 'admin'])],
+            'role' => ['sometimes', 'string', Rule::in(['user', 'admin', 'superadmin'])],
             'active' => ['sometimes', 'boolean'],
         ]);
 
-        // Only admins can create admin users
-        if (isset($validated['role']) && $validated['role'] === 'admin' && !$currentUser->isAdmin()) {
-            return response()->json(['message' => 'Forbidden: Only admins can create admin users.'], 403);
+        // Only admins can create admin users, only superadmins can create superadmin users
+        if (isset($validated['role'])) {
+            if ($validated['role'] === 'superadmin' && !$currentUser->isOwner()) {
+                return response()->json(['message' => 'Forbidden: Only superadmins can create superadmin users.'], 403);
+            }
+            if ($validated['role'] === 'admin' && !$currentUser->isAdmin() && !$currentUser->isOwner()) {
+                return response()->json(['message' => 'Forbidden: Only admins can create admin users.'], 403);
+            }
         }
 
         $user = User::create([
@@ -139,9 +165,14 @@ class UserController extends Controller
             'active' => ['sometimes', 'boolean'],
         ]);
 
-        // Only admins can promote to admin
-        if (isset($validated['role']) && $validated['role'] === 'admin' && !$currentUser->isAdmin()) {
-            return response()->json(['message' => 'Forbidden: Only admins can promote users to admin.'], 403);
+        // Only admins can promote to admin, only superadmins can promote to superadmin
+        if (isset($validated['role'])) {
+            if ($validated['role'] === 'superadmin' && !$currentUser->isOwner()) {
+                return response()->json(['message' => 'Forbidden: Only superadmins can promote users to superadmin.'], 403);
+            }
+            if ($validated['role'] === 'admin' && !$currentUser->isAdmin() && !$currentUser->isOwner()) {
+                return response()->json(['message' => 'Forbidden: Only admins can promote users to admin.'], 403);
+            }
         }
 
         $user->fill($validated);
@@ -176,6 +207,11 @@ class UserController extends Controller
             return response()->json(['message' => 'You cannot delete your own account.'], 403);
         }
 
+        // Prevent admin from deleting superadmin
+        if ($user->isOwner() && !$currentUser->isOwner()) {
+            return response()->json(['message' => 'Forbidden: You do not have permission to delete this user.'], 403);
+        }
+
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully.']);
@@ -184,18 +220,19 @@ class UserController extends Controller
     /**
      * List admin users (superadmin/owner only)
      */
-    public function listAdmins(): JsonResponse
+    public function listAdmins(Request $request): JsonResponse
     {
         $currentUser = Auth::user();
         if (!$currentUser->isOwner()) {
             return response()->json(['message' => 'Forbidden: Superadmin access required.'], 403);
         }
 
+        $perPage = $request->input('per_page', 10);
         $admins = User::whereIn('role', ['admin', 'superadmin'])
             ->select(['id', 'name', 'email', 'role', 'active', 'created_at'])
             ->orderBy('role')
             ->orderBy('name')
-            ->get();
+            ->paginate($perPage);
 
         return response()->json($admins);
     }
