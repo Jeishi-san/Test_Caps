@@ -12,10 +12,10 @@ export function formatFileSize(bytes: number, options: FormatFileSizeOptions = {
 
     const k = 1024;
     const sizes = longBytesLabel
-        ? ['Bytes', 'KB', 'MB', 'GB', 'TB']
-        : ['B', 'KB', 'MB', 'GB', 'TB'];
+        ? ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB']
+        : ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
 
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
     const value = bytes / Math.pow(k, i);
 
     return `${value.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')} ${sizes[i]}`;

@@ -1,0 +1,22 @@
+# StegoLock Python Dependencies
+# ==============================
+# 
+# These packages are required for the Python steganography drivers.
+# Install in CI with: pip install -r python/requirements.txt
+
+# Required for WAV steganography (wav_embed.py)
+numpy>=1.21.0
+
+# Required for image steganography (stego_lsb.py)
+# NumPy is used for vectorized LSB operations
+numpy>=1.21.0
+# Pillow is used for image processing
+Pillow>=9.0.0
+
+# Optional: stegano library (for legacy extraction fallback in stego_lsb.py)
+# stegano>=0.11.0
+
+# Notes:
+# - The WAV validator (wav_validator.py) uses only standard library (wave, json, sys)
+# - The stego_lsb.py script uses multiprocessing (standard library) for performance
+# - Configure the Python path in .env: STEGO_PYTHON_PATH=python (or full path to python.exe)

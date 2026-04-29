@@ -116,8 +116,8 @@ export default function Register() {
                     {/* Password Requirements Checklist */}
                     {data.password.length > 0 && (
                         <div className="mt-3 space-y-2">
-                            {passwordRequirements.map((req, index) => (
-                                <div key={index} className="flex items-center gap-2">
+                            {passwordRequirements.map((req) => (
+                                <div key={req.text} className="flex items-center gap-2">
                                     <CheckCircle2
                                         className={`w-4 h-4 ${req.met ? 'text-green-600' : 'text-gray-500 opacity-30'}`}
                                     />

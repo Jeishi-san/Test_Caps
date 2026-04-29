@@ -54,6 +54,7 @@ class StegoService
         $this->assertFileExists($carrierPath);
 
         $mime = mime_content_type($carrierPath);
+        $ext  = strtolower(pathinfo($carrierPath, PATHINFO_EXTENSION));
 
         if ($this->isLsbCapable($mime)) {
             return $this->isPythonDriver()
@@ -61,11 +62,13 @@ class StegoService
                 : $this->embedLSB($carrierPath, $data, $outputPath, $mime);
         }
 
-        if ($this->isAudio($mime)) {
+        // Audio WAV: accept by mime or by .wav extension
+        if ($this->isAudio($mime) || $ext === 'wav') {
             return $this->embedAudio($carrierPath, $data, $outputPath);
         }
 
-        if ($this->isText($mime)) {
+        // Text TXT: accept by mime or by .txt extension
+        if ($this->isText($mime) || $ext === 'txt') {
             return $this->embedAppend($carrierPath, $data, $outputPath);
         }
 
@@ -88,6 +91,7 @@ class StegoService
         $this->assertFileExists($carrierPath);
 
         $mime = mime_content_type($carrierPath);
+        $ext  = strtolower(pathinfo($carrierPath, PATHINFO_EXTENSION));
 
         if ($this->isLsbCapable($mime)) {
             return $this->isPythonDriver()
@@ -95,11 +99,13 @@ class StegoService
                 : $this->extractLSB($carrierPath);
         }
 
-        if ($this->isAudio($mime)) {
+        // Audio WAV: accept by mime or by .wav extension
+        if ($this->isAudio($mime) || $ext === 'wav') {
             return $this->extractAudio($carrierPath);
         }
 
-        if ($this->isText($mime)) {
+        // Text TXT: accept by mime or by .txt extension
+        if ($this->isText($mime) || $ext === 'txt') {
             return $this->extractAppend($carrierPath);
         }
 
@@ -147,6 +153,7 @@ class StegoService
         $this->assertFileExists($carrierPath);
 
         $mime = mime_content_type($carrierPath);
+        $ext  = strtolower(pathinfo($carrierPath, PATHINFO_EXTENSION));
 
         if ($this->isLsbCapable($mime)) {
             return $this->isPythonDriver()
@@ -155,12 +162,14 @@ class StegoService
         }
 
         // Audio WAV: 1 bit per sample, header excluded, safety factor applied
-        if ($this->isAudio($mime)) {
+        // Accept by mime type OR by .wav extension (defensive fallback for environments with poor mime detection)
+        if ($this->isAudio($mime) || $ext === 'wav') {
             return $this->capacityWav($carrierPath);
         }
 
         // Text TXT: append-mode conservative capacity
-        if ($this->isText($mime)) {
+        // Accept by mime type OR by .txt extension
+        if ($this->isText($mime) || $ext === 'txt') {
             return $this->capacityText($carrierPath);
         }
 
@@ -420,7 +429,9 @@ class StegoService
         $width  = imagesx($image);
         $height = imagesy($image);
         $pixels = $width * $height;
-        $channels = $this->detectChannels($image);
+        // Always use 3 channels (RGB). Alpha channel is not used for embedding to maintain
+        // compatibility with extractLSB which reads only RGB. This also avoids flawed channel detection.
+        $channels = 3;
 
         // Prepend 4-byte big-endian length header to the payload.
         // Add ###END### delimiter (9 bytes) to mark end of data for reliable extraction.
@@ -430,7 +441,6 @@ class StegoService
         $bitCount = count($bits);
 
         // Apply safety buffer: 90% of actual capacity to prevent edge case failures
-        // Subtract delimiter bytes from usable capacity
         $maxBits = (int) ($pixels * $channels * 0.9);
 
         if ($bitCount > $maxBits) {
@@ -450,7 +460,8 @@ class StegoService
                 $r = ($pixel >> 16) & 0xFF;
                 $g = ($pixel >> 8)  & 0xFF;
                 $b = $pixel         & 0xFF;
-                $a = ($pixel >> 24) & 0xFF; // Alpha channel (if present)
+                // Preserve original alpha if present (do not modify)
+                $a = ($pixel >> 24) & 0xFF;
 
                 if ($bitIndex < $bitCount) {
                     $r = ($r & 0xFE) | $bits[$bitIndex++];
@@ -461,11 +472,8 @@ class StegoService
                 if ($bitIndex < $bitCount) {
                     $b = ($b & 0xFE) | $bits[$bitIndex++];
                 }
-                // Embed in alpha channel if image supports it (RGBA)
-                if ($channels === 4 && $bitIndex < $bitCount) {
-                    $a = ($a & 0xFE) | $bits[$bitIndex++];
-                }
 
+                // Use imagecolorallocatealpha to preserve alpha channel if present
                 imagesetpixel($image, $x, $y, imagecolorallocatealpha($image, $r, $g, $b, $a));
             }
         }
@@ -600,7 +608,17 @@ class StegoService
             throw new Exception('Carrier image does not contain enough data for the declared payload length.');
         }
 
-        return $this->bitsToBytes($payloadBits);
+        $raw = $this->bitsToBytes($payloadBits);
+
+        // The embedLSB method appends a '###END###' delimiter (9 bytes) to the payload.
+        // Strip it if present to return only the original data.
+        $delimiter = '###END###';
+        $delimiterLength = strlen($delimiter);
+        if (strlen($raw) >= $delimiterLength && substr($raw, -$delimiterLength) === $delimiter) {
+            $raw = substr($raw, 0, -$delimiterLength);
+        }
+
+        return $raw;
     }
 
     // -------------------------------------------------------------------------
@@ -753,11 +771,141 @@ class StegoService
     /**
      * Calculate WAV capacity: (filesize - 44 bytes header) / 8 bits per byte × 0.95 safety
      * Supports PCM only. Returns 0 if file too small or invalid.
+     *
+     * Hardened to validate WAV header before calculating capacity.
      */
     private function capacityWav(string $carrierPath): int
     {
+        // First, validate WAV header in PHP (works without Python)
+        $headerValidation = $this->validateWavHeader($carrierPath);
+        if (!$headerValidation['valid']) {
+            return 0;
+        }
+
+        // Try Python validator for more accurate capacity calculation if available
         $result = $this->runWavValidator($carrierPath);
-        return $result['valid'] ? (int)($result['capacity_bytes'] ?? 0) : 0;
+        if ($result['valid'] && isset($result['capacity_bytes'])) {
+            return (int) $result['capacity_bytes'];
+        }
+
+        // Fallback: calculate capacity from header info
+        $fileSize = filesize($carrierPath);
+        if ($fileSize === false || $fileSize < 44) {
+            return 0;
+        }
+
+        // Capacity = (fileSize - 44 header) * 0.95 safety factor
+        // Each byte of audio data can hold 1 bit
+        $audioBytes = $fileSize - 44;
+        $capacityBytes = (int) ($audioBytes * 0.95);
+
+        return max(0, $capacityBytes);
+    }
+
+    /**
+     * Validate WAV file header in pure PHP.
+     * Returns ['valid' => true] or ['valid' => false, 'reason' => '...']
+     */
+    private function validateWavHeader(string $filePath): array
+    {
+        $fileSize = filesize($filePath);
+        if ($fileSize === false || $fileSize < 44) {
+            return ['valid' => false, 'reason' => 'File too small to contain a valid WAV header (minimum 44 bytes)'];
+        }
+
+        $handle = @fopen($filePath, 'rb');
+        if ($handle === false) {
+            return ['valid' => false, 'reason' => 'Cannot open file for header validation'];
+        }
+
+        try {
+            // Read RIFF header (12 bytes)
+            $riffHeader = fread($handle, 12);
+            if (strlen($riffHeader) < 12) {
+                return ['valid' => false, 'reason' => 'Incomplete RIFF header'];
+            }
+
+            // Check "RIFF" magic
+            if (substr($riffHeader, 0, 4) !== 'RIFF') {
+                return ['valid' => false, 'reason' => 'Missing RIFF signature'];
+            }
+
+            // Check "WAVE" format
+            if (substr($riffHeader, 8, 4) !== 'WAVE') {
+                return ['valid' => false, 'reason' => 'Not a WAVE file (missing WAVE signature)'];
+            }
+
+            // Read fmt chunk header (8 bytes)
+            $fmtHeader = fread($handle, 8);
+            if (strlen($fmtHeader) < 8) {
+                error_log("WAV Debug: Incomplete fmt chunk header, got " . strlen($fmtHeader) . " bytes");
+                return ['valid' => false, 'reason' => 'Incomplete fmt chunk header'];
+            }
+
+            // Check "fmt " chunk
+            if (substr($fmtHeader, 0, 4) !== 'fmt ') {
+                return ['valid' => false, 'reason' => 'Missing fmt chunk'];
+            }
+
+            $fmtSize = unpack('V', substr($fmtHeader, 4, 4))[1];
+
+            // Read fmt chunk data
+            $fmtData = fread($handle, $fmtSize);
+            if (strlen($fmtData) < $fmtSize) {
+                return ['valid' => false, 'reason' => 'Incomplete fmt chunk data'];
+            }
+
+            // Parse audio format (PCM = 1)
+            $audioFormat = unpack('v', substr($fmtData, 0, 2))[1];
+            if ($audioFormat !== 1) {
+                return ['valid' => false, 'reason' => "Non-PCM compression not supported (format: {$audioFormat})"];
+            }
+
+            // Check sample width (8-bit or 16-bit)
+            $sampleWidth = unpack('v', substr($fmtData, 14, 2))[1];
+
+            // Check sample width (8-bit or 16-bit)
+            // Note: WAV "bits per sample" field is in BITS, not bytes
+            if (!in_array($sampleWidth, [8, 16], true)) {
+                return ['valid' => false, 'reason' => "Unsupported sample width: {$sampleWidth} bits (only 8/16-bit PCM supported)"];
+            }
+
+            // Check channels
+            $channels = unpack('v', substr($fmtData, 2, 2))[1];
+
+            if ($channels === 0) {
+                return ['valid' => false, 'reason' => 'Zero audio channels'];
+            }
+            if ($channels > 2) {
+                return ['valid' => false, 'reason' => "Too many channels: {$channels} (max 2 supported)"];
+            }
+
+            // Verify data chunk exists
+            while (!feof($handle)) {
+                $chunkHeader = fread($handle, 8);
+
+                if (strlen($chunkHeader) < 8) {
+                    break;
+                }
+
+                $chunkId = substr($chunkHeader, 0, 4);
+                $chunkSize = unpack('V', substr($chunkHeader, 4, 4))[1];
+
+                if ($chunkId === 'data') {
+                    if ($chunkSize === 0) {
+                        return ['valid' => false, 'reason' => 'WAV file contains no audio data'];
+                    }
+                    return ['valid' => true];
+                }
+
+                // Skip to next chunk
+                fseek($handle, $chunkSize, SEEK_CUR);
+            }
+
+            return ['valid' => false, 'reason' => 'No data chunk found in WAV file'];
+        } finally {
+            fclose($handle);
+        }
     }
 
     /**

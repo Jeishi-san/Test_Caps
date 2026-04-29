@@ -80,13 +80,31 @@ class WavStegoTest extends TestCase
         $byteRate = $sampleRate * $numChannels * $bitsPerSample / 8;
         $blockAlign = $numChannels * $bitsPerSample / 8;
         $dataSize = $sampleRate * $blockAlign; // 1 second of audio
-        $fileSize = 44 + $dataSize;
+        $fileSize = 36 + $dataSize;
 
-        $header = pack('N4', 0x46464952, $fileSize, 0x45564157, 0x20746d66); // "RIFF", size, "WAVE", "fmt "
-        $fmt = pack('N2n2N2', 16, 1, $numChannels, $sampleRate, $byteRate, $blockAlign, $bitsPerSample);
-        $dataHeader = pack('N2', 0x61746164, $dataSize);
-        $samples = str_repeat("\x00", $dataSize); // silence
+        // Build WAV header (44 bytes total)
+        // RIFF chunk
+        $header  = 'RIFF';                           // Chunk ID (4 bytes)
+        $header .= pack('V', 36 + $dataSize);         // Chunk Size (4 bytes): 4 + (8 + 16) + (8 + dataSize) - 8 = 36 + dataSize
+        $header .= 'WAVE';                           // Format (4 bytes)
 
-        return $header . $fmt . $dataHeader . $samples;
+        // fmt subchunk
+        $header .= 'fmt ';                           // Subchunk1 ID (4 bytes)
+        $header .= pack('V', 16);                    // Subchunk1 Size (4 bytes): 16 for PCM
+        $header .= pack('v', 1);                     // Audio Format (2 bytes): 1 = PCM
+        $header .= pack('v', $numChannels);           // Num Channels (2 bytes)
+        $header .= pack('V', $sampleRate);            // Sample Rate (4 bytes)
+        $header .= pack('V', $byteRate);              // Byte Rate (4 bytes)
+        $header .= pack('v', $blockAlign);            // Block Align (2 bytes)
+        $header .= pack('v', $bitsPerSample);         // Bits Per Sample (2 bytes)
+
+        // data subchunk
+        $header .= 'data';                           // Subchunk2 ID (4 bytes)
+        $header .= pack('V', $dataSize);              // Subchunk2 Size (4 bytes)
+
+        // Audio data (silence)
+        $samples = str_repeat("\x00", $dataSize);
+
+        return $header . $samples;
     }
 }

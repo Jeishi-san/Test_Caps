@@ -368,12 +368,12 @@ export default function Authenticated({
             <h4 className="text-sm font-semibold text-gray-500 uppercase mb-4">Security Features</h4>
             <div className="space-y-4">
               {[
-                { icon: Lock, title: 'End-to-End Encryption', desc: 'All files encrypted locally' },
-                { icon: Key, title: 'Zero-Knowledge Architecture', desc: 'We never access your keys' },
-                { icon: Shield, title: 'Secure File Transfer', desc: 'TLS 1.3 for all transfers' },
-                { icon: Eye, title: 'Privacy Protection', desc: 'No third-party sharing' },
-              ].map((feature, index) => (
-                <div key={index} className="bg-gray-50 rounded-xl p-4">
+                { id: 'encryption', icon: Lock, title: 'End-to-End Encryption', desc: 'All files encrypted locally' },
+                { id: 'zero-knowledge', icon: Key, title: 'Zero-Knowledge Architecture', desc: 'We never access your keys' },
+                { id: 'secure-transfer', icon: Shield, title: 'Secure File Transfer', desc: 'TLS 1.3 for all transfers' },
+                { id: 'privacy', icon: Eye, title: 'Privacy Protection', desc: 'No third-party sharing' },
+              ].map((feature) => (
+                <div key={feature.id} className="bg-gray-50 rounded-xl p-4">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-green-100 rounded-lg">
                       <feature.icon className="w-5 h-5 text-green-600" />

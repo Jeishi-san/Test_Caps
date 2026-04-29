@@ -13,7 +13,7 @@ export default function SelectedFilesList({ files, detailed = false }: SelectedF
             {detailed ? (
                 <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-gray-600">
                     {Array.from(files).map((file, index) => (
-                        <li key={index} className="truncate">
+                        <li key={`${file.name}-${file.size}-${file.lastModified}-${index}`} className="truncate">
                             {file.name} ({(file.size / 1024).toFixed(1)} KB)
                         </li>
                     ))}
